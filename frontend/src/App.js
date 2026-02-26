@@ -1119,21 +1119,29 @@ const ParentDashboard = () => {
           <Card testId="link-learner-card">
             <h3 className="font-heading font-bold mb-4">Koppel 'n Leerder</h3>
             <p className="text-text-secondary mb-4">
-              Voer jou kind se gebruikersnaam in om hul vordering te sien.
+              Voer jou kind se <strong>naam en van</strong> in om hul vordering te sien.
             </p>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <input
                 type="text"
-                className="input-field flex-1"
-                value={linkUsername}
-                onChange={(e) => setLinkUsername(e.target.value)}
-                placeholder="Leerder gebruikersnaam"
-                data-testid="link-username-input"
+                className="input-field"
+                value={linkForm.name}
+                onChange={(e) => setLinkForm({...linkForm, name: e.target.value})}
+                placeholder="Naam (bv. Jan)"
+                data-testid="link-name-input"
               />
-              <Button onClick={handleLinkLearner} disabled={linking} testId="link-learner-btn">
-                {linking ? "Koppel..." : "Koppel"}
-              </Button>
+              <input
+                type="text"
+                className="input-field"
+                value={linkForm.surname}
+                onChange={(e) => setLinkForm({...linkForm, surname: e.target.value})}
+                placeholder="Van (bv. van der Berg)"
+                data-testid="link-surname-input"
+              />
             </div>
+            <Button onClick={handleLinkLearner} disabled={linking} testId="link-learner-btn" className="w-full">
+              {linking ? "Koppel..." : "Koppel Leerder"}
+            </Button>
           </Card>
 
           {/* Linked Learners */}
