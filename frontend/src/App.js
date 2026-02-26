@@ -1063,16 +1063,27 @@ const ParentDashboard = () => {
     }
   }, [selectedLearner]);
 
-  // Send weekly progress email
-  const sendWeeklyEmail = async () => {
-    setSendingEmail(true);
+  // Generate weekly progress text for manual sharing
+  const [progressText, setProgressText] = useState("");
+  const [generatingText, setGeneratingText] = useState(false);
+  const [showProgressText, setShowProgressText] = useState(false);
+
+  const generateProgressText = async () => {
+    setGeneratingText(true);
     try {
-      const res = await api.post("/parent/send-weekly-progress");
-      toast.success(res.data.message);
+      const res = await api.get("/parent/weekly-progress-text");
+      setProgressText(res.data.text);
+      setShowProgressText(true);
+      toast.success("Opsomming gegenereer!");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Kon nie e-pos stuur nie");
+      toast.error(err.response?.data?.detail || "Kon nie genereer nie");
     }
-    setSendingEmail(false);
+    setGeneratingText(false);
+  };
+
+  const copyProgressText = () => {
+    navigator.clipboard.writeText(progressText);
+    toast.success("Gekopieer! Plak dit nou in WhatsApp of SMS");
   };
 
   const handleLinkLearner = async () => {
