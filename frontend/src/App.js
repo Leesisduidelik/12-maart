@@ -2525,27 +2525,91 @@ const TextsTab = ({ texts, setTexts }) => {
     }
   };
         
-  // Render text item for folder view
+  // Render text item for folder view - now with audio support
   const renderTextItem = (text) => (
-    <div key={text.id} className="flex items-center justify-between bg-white border rounded-lg p-3 hover:border-primary-200 transition-colors">
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
+    <div key={text.id} className="bg-white border rounded-lg p-3 hover:border-primary-200 transition-colors">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 flex-1">
           <FileText className="w-4 h-4 text-primary-500" />
           <span className="font-medium text-sm">{text.title}</span>
           {text.audio_url && <Volume2 className="w-3 h-3 text-primary-500" title="Het oudio" />}
         </div>
-        <p className="text-xs text-text-muted mt-1">
-          {text.is_ai_generated ? "AI" : "Handmatig"}
-          {text.questions?.length > 0 && ` | ${text.questions.length} vrae`}
-        </p>
+        <div className="flex gap-1">
+          <button 
+            onClick={() => handleStartEdit(text)}
+            className="p-1 text-primary-500 hover:bg-primary-50 rounded"
+            data-testid={`edit-text-folder-${text.id}`}
+            title="Wysig"
+          >
+            <Edit3 className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => handleDeleteText(text.id)}
+            className="p-1 text-accent-500 hover:bg-accent-50 rounded"
+            data-testid={`delete-text-folder-${text.id}`}
+            title="Verwyder"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
-      <button 
-        onClick={() => handleDeleteText(text.id)}
-        className="p-1 text-accent-500 hover:bg-accent-50 rounded"
-        data-testid={`delete-text-folder-${text.id}`}
-      >
-        <X className="w-4 h-4" />
-      </button>
+      <p className="text-xs text-text-muted mt-1 ml-6">
+        {text.is_ai_generated ? "AI" : "Handmatig"}
+        {text.questions?.length > 0 && ` | ${text.questions.length} vrae`}
+      </p>
+      
+      {/* Audio Upload/Record for Listening & Spelling */}
+      {(text.text_type === "listening" || text.text_type === "spelling") && (
+        <div className="mt-3 pt-3 border-t ml-6">
+          {text.audio_url ? (
+            <div className="mb-2">
+              <audio controls src={`${BACKEND_URL}${text.audio_url}`} className="w-full h-8" />
+            </div>
+          ) : (
+            <p className="text-xs text-yellow-600 mb-2">⚠️ Geen oudio - laai op of neem op</p>
+          )}
+          
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="file"
+              accept="audio/*"
+              id={`audio-upload-${text.id}`}
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleAudioUpload(text.id, e.target.files[0])}
+            />
+            <button
+              onClick={() => document.getElementById(`audio-upload-${text.id}`)?.click()}
+              className="flex items-center gap-1 text-xs px-2 py-1 bg-primary-100 text-primary-700 rounded hover:bg-primary-200 transition-colors"
+              disabled={uploadingAudio === text.id || isRecording}
+              data-testid={`upload-audio-folder-${text.id}`}
+            >
+              <Upload className="w-3 h-3" />
+              {uploadingAudio === text.id ? "Laai..." : "Laai Op"}
+            </button>
+            
+            {isRecording && recordingTextId === text.id ? (
+              <button
+                onClick={stopRecording}
+                className="flex items-center gap-1 text-xs px-2 py-1 bg-accent-500 text-white rounded hover:bg-accent-600 transition-colors animate-pulse"
+                data-testid={`stop-rec-folder-${text.id}`}
+              >
+                <Pause className="w-3 h-3" />
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={() => startRecording(text.id)}
+                className="flex items-center gap-1 text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                disabled={isRecording}
+                data-testid={`start-rec-folder-${text.id}`}
+              >
+                <Mic className="w-3 h-3" />
+                Neem Op
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 
