@@ -1852,7 +1852,73 @@ async def get_linked_learner_progress(learner_id: str, current_user: dict = Depe
         "subscription": subscription
     }
 
-# Weekly Progress Email for Parents
+# Weekly Progress Text Generation (for manual sharing via WhatsApp/SMS)
+@api_router.get("/parent/weekly-progress-text")
+async def get_weekly_progress_text(current_user: dict = Depends(get_current_user)):
+    """Generate weekly progress summary as text for manual sharing (no email cost)"""
+    parent = await db.parents.find_one({"id": current_user.get("user_id")})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Ouer nie gevind nie")
+    
+    linked_ids = parent.get("linked_learners", [])
+    if not linked_ids:
+        raise HTTPException(status_code=400, detail="Geen leerders gekoppel nie")
+    
+    from datetime import timedelta
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    
+    type_labels = {
+        "comprehension": "Begrip",
+        "reading_aloud": "Hardoplees",
+        "listening": "Luister",
+        "spelling": "Spelling"
+    }
+    
+    text_lines = ["📚 *Lees is Duidelik - Weeklikse Vordering*", ""]
+    text_lines.append(f"Goeiedag {parent['name']}!")
+    text_lines.append("")
+    
+    for learner_id in linked_ids:
+        learner = await db.learners.find_one({"id": learner_id}, {"_id": 0, "password_hash": 0})
+        if not learner:
+            continue
+        
+        results = await db.exercise_results.find({
+            "learner_id": learner_id,
+            "created_at": {"$gte": week_ago}
+        }, {"_id": 0}).to_list(100)
+        
+        total = len(results)
+        avg = round(sum(r.get("score", 0) for r in results) / total) if total > 0 else 0
+        
+        type_counts = {}
+        for r in results:
+            t = r.get("exercise_type", "ander")
+            type_counts[t] = type_counts.get(t, 0) + 1
+        
+        type_str = ", ".join([f"{type_labels.get(t, t)}: {c}" for t, c in type_counts.items()]) or "Geen"
+        
+        text_lines.append(f"*{learner.get('name', '')} {learner.get('surname', '')}* (Graad {learner.get('grade', '?')})")
+        text_lines.append(f"• Oefeninge voltooi: {total}")
+        text_lines.append(f"• Gemiddelde telling: {avg}%")
+        text_lines.append(f"• Tipes: {type_str}")
+        text_lines.append("")
+    
+    if len(text_lines) <= 4:
+        text_lines.append("Geen aktiwiteit die week nie.")
+        text_lines.append("")
+    
+    text_lines.append("💡 Moedig jou kind aan om elke dag te oefen!")
+    text_lines.append("")
+    text_lines.append("- Lees is Duidelik")
+    
+    return {
+        "text": "\n".join(text_lines),
+        "parent_name": parent["name"],
+        "learner_count": len(linked_ids)
+    }
+
+# Weekly Progress Email for Parents (optional - costs money)
 @api_router.post("/parent/send-weekly-progress")
 async def send_weekly_progress_email(current_user: dict = Depends(get_current_user)):
     """Send weekly progress summary to parent via email (requires password auth only, no OTP)"""
