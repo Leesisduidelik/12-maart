@@ -2206,6 +2206,92 @@ const TextsTab = ({ texts, setTexts }) => {
     }
     setUploadingAudio(null);
   };
+
+  // Start editing a text
+  const handleStartEdit = (text) => {
+    setEditingText(text.id);
+    setEditForm({
+      title: text.title,
+      content: text.content,
+      grade_level: text.grade_level,
+      text_type: text.text_type,
+      questions: text.questions || []
+    });
+  };
+
+  // Save edited text
+  const handleSaveEdit = async () => {
+    if (!editForm.title || !editForm.content) {
+      toast.error("Titel en inhoud is nodig");
+      return;
+    }
+    try {
+      await api.put(`/texts/${editingText}`, editForm);
+      toast.success("Teks opgedateer!");
+      const res = await api.get("/texts");
+      setTexts(res.data);
+      setEditingText(null);
+      setEditForm(null);
+    } catch (err) {
+      toast.error("Kon nie teks opdateer nie");
+    }
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setEditingText(null);
+    setEditForm(null);
+  };
+
+  // Start audio recording
+  const startRecording = async (textId) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+      
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Upload the recorded audio
+        const formData = new FormData();
+        formData.append("file", audioBlob, "recording.webm");
+        
+        try {
+          await api.post(`/texts/${textId}/audio`, formData, {
+            headers: { "Content-Type": "multipart/form-data" }
+          });
+          toast.success("Opname opgelaai!");
+          const res = await api.get("/texts");
+          setTexts(res.data);
+        } catch (err) {
+          toast.error("Kon nie opname oplaai nie");
+        }
+        setRecordingTextId(null);
+      };
+      
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+      setRecordingTextId(textId);
+      toast.success("Opname begin - praat nou!");
+    } catch (err) {
+      toast.error("Kon nie mikrofoon kry nie - gee asseblief toestemming");
+    }
+  };
+
+  // Stop audio recording
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      toast.success("Opname gestop - laai op...");
+    }
+  };
         
   // Render text item for folder view
   const renderTextItem = (text) => (
