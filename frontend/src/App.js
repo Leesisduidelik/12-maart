@@ -4703,7 +4703,7 @@ const AdminDashboard = ({ onLogout }) => {
                     testId="settings-contact-email"
                   />
                   <Input
-                    label="Kontak Telefoon"
+4706|                    label="Kontak Telefoon"
                     value={siteSettings.contact_phone}
                     onChange={(e) => setSiteSettings({...siteSettings, contact_phone: e.target.value})}
                     placeholder="bv. 012 345 6789"
@@ -4720,6 +4720,64 @@ const AdminDashboard = ({ onLogout }) => {
               >
                 {savingSettings ? "Stoor..." : "Stoor Instellings"}
               </Button>
+
+              {/* Admin Password Change */}
+              <Card className="mt-6" testId="password-change-card">
+                <h3 className="font-heading font-bold mb-4">🔐 Verander Admin Wagwoord</h3>
+                <div className="space-y-4">
+                  <Input
+                    label="Huidige Wagwoord"
+                    type="password"
+                    value={passwordForm?.current || ""}
+                    onChange={(e) => setPasswordForm({...passwordForm, current: e.target.value})}
+                    testId="current-password-input"
+                  />
+                  <Input
+                    label="Nuwe Wagwoord"
+                    type="password"
+                    value={passwordForm?.new || ""}
+                    onChange={(e) => setPasswordForm({...passwordForm, new: e.target.value})}
+                    testId="new-password-input"
+                  />
+                  <Input
+                    label="Bevestig Nuwe Wagwoord"
+                    type="password"
+                    value={passwordForm?.confirm || ""}
+                    onChange={(e) => setPasswordForm({...passwordForm, confirm: e.target.value})}
+                    testId="confirm-password-input"
+                  />
+                  <Button 
+                    onClick={async () => {
+                      if (!passwordForm?.current || !passwordForm?.new || !passwordForm?.confirm) {
+                        toast.error("Vul al die velde in");
+                        return;
+                      }
+                      if (passwordForm.new !== passwordForm.confirm) {
+                        toast.error("Nuwe wagwoorde stem nie ooreen nie");
+                        return;
+                      }
+                      if (passwordForm.new.length < 6) {
+                        toast.error("Wagwoord moet ten minste 6 karakters wees");
+                        return;
+                      }
+                      try {
+                        const res = await api.post("/auth/admin/change-password", {
+                          current_password: passwordForm.current,
+                          new_password: passwordForm.new
+                        });
+                        toast.success(res.data.message);
+                        setPasswordForm({ current: "", new: "", confirm: "" });
+                      } catch (err) {
+                        toast.error(err.response?.data?.detail || "Kon nie wagwoord verander nie");
+                      }
+                    }}
+                    variant="secondary"
+                    testId="change-password-btn"
+                  >
+                    Verander Wagwoord
+                  </Button>
+                </div>
+              </Card>
             </div>
           )}
         </div>
