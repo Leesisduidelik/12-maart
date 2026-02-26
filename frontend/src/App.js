@@ -1776,6 +1776,24 @@ const ExercisePage = ({ user }) => {
               {/* Comprehension/Spelling - Questions from database */}
               {(exerciseType === "comprehension" || exerciseType === "spelling") && (
                 <div className="space-y-4">
+                  {/* Audio player for spelling tests */}
+                  {exerciseType === "spelling" && currentExercise?.audio_url && (
+                    <div className="bg-secondary-50 rounded-xl p-4 mb-4">
+                      <p className="text-sm font-semibold text-secondary-700 mb-2">🔊 Luister na die woord:</p>
+                      <audio 
+                        controls 
+                        src={`${BACKEND_URL}${currentExercise.audio_url}`} 
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                  
+                  {exerciseType === "spelling" && !currentExercise?.audio_url && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4 text-center">
+                      <p className="text-yellow-700">⚠️ Geen oudio beskikbaar vir hierdie toets nie</p>
+                    </div>
+                  )}
+                  
                   {currentExercise?.questions && currentExercise.questions.length > 0 ? (
                     <>
                       {currentExercise.questions.map((question, idx) => (
