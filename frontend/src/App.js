@@ -1838,11 +1838,17 @@ const ExercisePage = ({ user }) => {
                   ) : (
                     // Fallback for old-style exercises without structured questions
                     <>
-                      <p className="text-text-secondary">Tik jou antwoorde in:</p>
-                      {[1, 2, 3, 4, 5].map((num) => (
+                      <p className="text-text-secondary">
+                        {exerciseType === "spelling" ? "Skryf die woorde wat jy hoor:" : "Tik jou antwoorde in:"}
+                      </p>
+                      {/* Spelling: 10-20 words based on grade, Comprehension: 10 questions */}
+                      {Array.from({ length: exerciseType === "spelling" 
+                        ? Math.min(10 + (currentExercise?.grade_level || 1), 20) // 10-20 words for spelling
+                        : 10 // 10 questions for comprehension
+                      }, (_, i) => i + 1).map((num) => (
                         <Input
                           key={num}
-                          label={`Antwoord ${num}`}
+                          label={exerciseType === "spelling" ? `Woord ${num}` : `Antwoord ${num}`}
                           value={answers[num - 1]?.answer || answers[num - 1] || ""}
                           onChange={(e) => {
                             const newAnswers = [...answers];
