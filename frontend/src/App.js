@@ -1647,10 +1647,27 @@ const ExercisePage = ({ user }) => {
             <Card testId="exercise-content">
               <h2 className="font-heading text-lg font-bold mb-4">{currentExercise?.title}</h2>
               
-              {/* Content Display */}
-              <div className="bg-slate-50 rounded-2xl p-6 mb-6">
-                <p className="text-lg leading-relaxed whitespace-pre-wrap">{currentExercise?.content}</p>
-              </div>
+              {/* Content Display - HIDE for listening and spelling tests */}
+              {exerciseType !== "listening" && exerciseType !== "spelling" && (
+                <div className="bg-slate-50 rounded-2xl p-6 mb-6">
+                  <p className="text-lg leading-relaxed whitespace-pre-wrap">{currentExercise?.content}</p>
+                </div>
+              )}
+              
+              {/* Audio instruction for listening/spelling */}
+              {(exerciseType === "listening" || exerciseType === "spelling") && (
+                <div className="bg-primary-50 rounded-2xl p-6 mb-6 text-center">
+                  <Headphones className="w-12 h-12 text-primary-500 mx-auto mb-3" />
+                  <p className="text-lg font-medium text-primary-700">
+                    {exerciseType === "listening" 
+                      ? "Luister na die oudio en beantwoord die vrae" 
+                      : "Luister na die woord en skryf dit korrek"}
+                  </p>
+                  <p className="text-sm text-primary-600 mt-2">
+                    Klik op die oudio speler hieronder om te begin
+                  </p>
+                </div>
+              )}
 
               {/* Reading Aloud */}
               {exerciseType === "reading" && (
