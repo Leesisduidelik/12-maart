@@ -1037,7 +1037,6 @@ const ParentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [linkForm, setLinkForm] = useState({ name: "", surname: "" });
   const [linking, setLinking] = useState(false);
-  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     api.get("/parent/me")
