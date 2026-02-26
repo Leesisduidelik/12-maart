@@ -1,18 +1,18 @@
 # Lees is Duidelik - PRD
 
 ## Original Problem Statement
-User wanted to deploy their Afrikaans reading learning app and replace Stripe payment with EFT (Electronic Funds Transfer) for South African banks. Subsequently requested 5 feature improvements/fixes.
+User wanted to deploy their Afrikaans reading learning app and replace Stripe payment with EFT (Electronic Funds Transfer) for South African banks. Subsequently requested 5 feature improvements/fixes, then 2 additional features.
 
 ## Architecture
 - **Frontend**: React.js with Tailwind CSS
 - **Backend**: FastAPI (Python)
 - **Database**: MongoDB
-- **Authentication**: JWT-based
-- **Email**: Resend (optional, for parent notifications)
+- **Authentication**: JWT-based (password only, no OTP for parents)
+- **Email**: Resend (for parent notifications and weekly progress)
 
 ## User Personas
 1. **Learners (Graad 1-9)**: Children learning to read in Afrikaans
-2. **Parents**: Monitor children's progress, manage subscriptions
+2. **Parents**: Monitor children's progress, manage subscriptions, receive weekly emails
 3. **Admin**: Manage content, schools, payments, users
 4. **Schools**: Bulk registration with school codes
 
@@ -28,85 +28,75 @@ User wanted to deploy their Afrikaans reading learning app and replace Stripe pa
 
 ## What's Been Implemented
 
+### Feb 26, 2026 - Additional Features
+
+#### 6. Weekly Progress Email for Parents (COMPLETED)
+- **Parents can request weekly progress summary via email**
+- No OTP required - uses existing password authentication
+- Endpoint: `POST /api/parent/send-weekly-progress`
+- Shows exercises completed, average scores, breakdown by type
+- Beautiful HTML email template in Afrikaans
+- "Stuur E-pos" button in Parent Dashboard
+- Admin bulk send: `POST /api/admin/send-all-weekly-progress`
+
+#### 7. Keyword Matching for Begripstoets (COMPLETED)
+- **Typed answers now use keyword matching instead of exact match**
+- 60% of keywords must match for answer to be correct
+- Excludes Afrikaans stop words: 'die', 'n', 'is', 'en', 'van', 'het', etc.
+- Multiple choice questions still require exact match
+- Keywords must be at least 3 characters
+- Much more forgiving for learners - better chance of 100%!
+
 ### Feb 26, 2026 - Feature Updates (5 Fixes)
 
 #### 1. Parent-Learner Linking (COMPLETED)
-- **Changed from username to full name + surname**
-- Updated `ParentLinkLearner` model to use `learner_name` and `learner_surname`
+- Changed from username to full name + surname
 - Case-insensitive search for learner matching
-- Email notification sent to parent on successful link (uses Resend)
-- Backend: `POST /api/parent/link-learner`
-- Frontend: Parent Dashboard now shows two input fields for name and surname
+- Email notification sent to parent on successful link
 
 #### 2. Admin Text Editing (COMPLETED)
-- **Added edit button for texts in admin panel**
-- New endpoint: `PUT /api/texts/{text_id}` for updating texts
-- TextUpdate model with optional fields: title, content, grade_level, text_type, questions
-- Frontend: Edit button appears next to delete button
-- Edit form shows inline with text content
+- Added edit button for texts in admin panel
+- PUT /api/texts/{text_id} endpoint
 
 #### 3. Admin Audio Upload & Recording (COMPLETED)
-- **Both options available for spelling/listening tests**
-- File upload: Click "Laai Lêer Op" to upload MP3/WAV
-- Direct recording: Click "Neem Op" to record with microphone
-- Uses MediaRecorder API for browser recording
-- Audio saved as WebM format when recorded
+- Both file upload AND direct microphone recording
+- For spelling & listening tests
 
-#### 4. Hardoplees (Reading Aloud) Analysis - Enhanced Feedback (COMPLETED)
-- **Shows specific error messages** for audio quality issues:
-  - "Te sag - probeer harder praat" (Too soft)
-  - "Opname te kort - probeer langer praat" (Recording too short)
-  - "Te veel agtergrondgeraas" (Background noise implied)
-  - "Kon geen woorde herken nie" (Couldn't recognize words)
-- Response now includes:
-  - `quality_issues`: List of detected problems
-  - `analysis_success`: Boolean indicating if analysis was successful
-  - `feedback_message`: User-friendly feedback text
+#### 4. Hardoplees Feedback (COMPLETED)
+- Shows specific error messages: "Te sag", "Opname te kort", etc.
 - Try Again button when analysis fails
 
-#### 5. Begripstoets Redo Button (COMPLETED)
-- **Second chance for comprehension tests**
-- After first attempt, "Probeer Weer" button appears
-- Second attempt counts for **50% of the score**
-- Learner is informed: "Hierdie poging tel slegs 50%"
-- After second attempt, **correct answers are shown**
-- Score display shows calculation: e.g., "50% (50% van 80% op 2de poging)"
+#### 5. Begripstoets Redo (COMPLETED)
+- Second chance counts 50%
+- Shows correct answers after 2nd attempt
 
-### Feb 25, 2026 - EFT Payment Integration
-- Removed Stripe payment integration
-- Added EFT (Electronic Funds Transfer) for South African banks
-- Bank details management for admin
-- Payment submission and confirmation flow
+## Environment Variables Required
+```
+RESEND_API_KEY=re_your_key_here   # Required for email features
+SENDER_EMAIL=your@domain.com      # Email sender address
+JWT_SECRET=your_secret            # JWT signing key
+```
 
 ## P0/P1/P2 Features Remaining
 
-### P0 (Critical) - Done
+### P0 (Critical) - All Done ✓
 - [x] EFT payment flow
-- [x] Parent-learner linking fix
-- [x] Admin text editing
-- [x] Audio upload/recording for tests
-- [x] Hardoplees feedback improvement
-- [x] Begripstoets redo functionality
+- [x] All 5 feature fixes
+- [x] Weekly email for parents
+- [x] Keyword matching for answers
 
 ### P1 (Important)
-- [ ] Email notifications when payment confirmed (Resend configured but needs API key)
+- [ ] Configure Resend API key in production
 - [ ] WhatsApp notifications integration
-- [ ] Proof of payment file upload
+- [ ] Automatic weekly email cron job
 
 ### P2 (Nice to have)
-- [ ] Payment reminders for expiring subscriptions
-- [ ] Bulk payment confirmation for schools
-- [ ] Payment analytics dashboard
-- [ ] Parent progress email reports
-
-## Environment Variables Added
-```
-RESEND_API_KEY=""  # Optional - for email notifications
-SENDER_EMAIL="onboarding@resend.dev"  # Email sender address
-```
+- [ ] Payment reminders
+- [ ] School bulk email reports
+- [ ] Parent mobile app
 
 ## Next Tasks
-1. Get Resend API key for email notifications (optional)
-2. Test full parent linking flow with email
-3. Configure actual bank details in production
+1. Configure RESEND_API_KEY in production environment
+2. Set up cron job for automatic weekly emails (call /api/admin/send-all-weekly-progress weekly)
+3. Test keyword matching with real comprehension questions
 4. Redeploy to production
