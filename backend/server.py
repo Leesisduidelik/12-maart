@@ -1274,7 +1274,7 @@ async def analyze_reading(
     finally:
         try:
             os.unlink(tmp_path)
-        except:
+        except OSError:
             pass
 
 # Exercise Routes
@@ -2169,7 +2169,7 @@ async def confirm_eft_payment(data: EFTPaymentConfirm, current_user: dict = Depe
             }}
         )
         
-        return {"message": f"Betaling bevestig! Leerder se subskripsie is nou aktief.", "status": "paid"}
+        return {"message": "Betaling bevestig! Leerder se subskripsie is nou aktief.", "status": "paid"}
     else:
         return {"message": "Betaling afgekeur.", "status": "rejected"}
 
