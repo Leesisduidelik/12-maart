@@ -323,6 +323,58 @@ async def check_subscription(learner_id: str) -> dict:
     return {"active": False, "reason": "Subskripsie vereis"}
 
 # Auth Routes
+class AdminPasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+@api_router.post("/auth/admin/change-password")
+async def change_admin_password(data: AdminPasswordChange, current_user: dict = Depends(get_current_user)):
+    """Admin changes their own password"""
+    if current_user.get("user_type") != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    # Verify current password
+    current_admin_password = os.environ.get('ADMIN_PASSWORD')
+    if data.current_password != current_admin_password:
+        raise HTTPException(status_code=401, detail="Huidige wagwoord is verkeerd")
+    
+    # Validate new password
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Nuwe wagwoord moet ten minste 6 karakters wees")
+    
+    # Update .env file with new password
+    env_path = Path(__file__).parent / ".env"
+    try:
+        # Read current .env content
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+        
+        # Update ADMIN_PASSWORD line
+        new_lines = []
+        password_updated = False
+        for line in lines:
+            if line.startswith("ADMIN_PASSWORD="):
+                new_lines.append(f'ADMIN_PASSWORD="{data.new_password}"\n')
+                password_updated = True
+            else:
+                new_lines.append(line)
+        
+        # If ADMIN_PASSWORD wasn't found, add it
+        if not password_updated:
+            new_lines.append(f'ADMIN_PASSWORD="{data.new_password}"\n')
+        
+        # Write back to .env
+        with open(env_path, "w") as f:
+            f.writelines(new_lines)
+        
+        # Update environment variable for current session
+        os.environ['ADMIN_PASSWORD'] = data.new_password
+        
+        return {"message": "Wagwoord suksesvol verander!"}
+    except Exception as e:
+        logger.error(f"Failed to update admin password: {str(e)}")
+        raise HTTPException(status_code=500, detail="Kon nie wagwoord opdateer nie")
+
 @api_router.post("/auth/admin/login", response_model=TokenResponse)
 async def admin_login(login: AdminLogin):
     admin_email = os.environ.get('ADMIN_EMAIL')
