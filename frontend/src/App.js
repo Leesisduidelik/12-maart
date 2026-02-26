@@ -1168,24 +1168,45 @@ const ParentDashboard = () => {
             </Button>
           </Card>
 
-          {/* Weekly Email Button */}
-          {parent?.email && parent?.learners?.length > 0 && (
-            <Card testId="weekly-email-card">
-              <div className="flex items-center justify-between">
+          {/* Weekly Progress - Generate & Copy for WhatsApp */}
+          {parent?.learners?.length > 0 && (
+            <Card testId="weekly-progress-card">
+              <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="font-heading font-bold">Weeklikse Opsomming</h3>
-                  <p className="text-sm text-text-muted">Ontvang 'n e-pos met jou kind(ers) se vordering</p>
+                  <p className="text-sm text-text-muted">Genereer en stuur via WhatsApp/SMS (gratis!)</p>
                 </div>
                 <Button 
-                  onClick={sendWeeklyEmail} 
-                  disabled={sendingEmail}
+                  onClick={generateProgressText} 
+                  disabled={generatingText}
                   variant="secondary"
-                  testId="send-weekly-email-btn"
+                  testId="generate-progress-btn"
                 >
-                  <Mail className="w-4 h-4 mr-2" />
-                  {sendingEmail ? "Stuur..." : "Stuur E-pos"}
+                  <FileText className="w-4 h-4 mr-2" />
+                  {generatingText ? "Genereer..." : "Genereer"}
                 </Button>
               </div>
+              
+              {showProgressText && progressText && (
+                <div className="mt-4">
+                  <div className="bg-slate-50 rounded-xl p-4 mb-3 max-h-64 overflow-y-auto">
+                    <pre className="whitespace-pre-wrap text-sm font-sans">{progressText}</pre>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={copyProgressText} testId="copy-progress-btn" className="flex-1">
+                      <Copy className="w-4 h-4 mr-2" />
+                      Kopieer vir WhatsApp
+                    </Button>
+                    <Button 
+                      variant="secondary" 
+                      onClick={() => setShowProgressText(false)}
+                      testId="close-progress-btn"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </Card>
           )}
 
