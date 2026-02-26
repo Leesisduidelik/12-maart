@@ -1035,7 +1035,7 @@ const ParentDashboard = () => {
   const [selectedLearner, setSelectedLearner] = useState(null);
   const [learnerProgress, setLearnerProgress] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [linkUsername, setLinkUsername] = useState("");
+  const [linkForm, setLinkForm] = useState({ name: "", surname: "" });
   const [linking, setLinking] = useState(false);
 
   useEffect(() => {
@@ -1063,21 +1063,27 @@ const ParentDashboard = () => {
   }, [selectedLearner]);
 
   const handleLinkLearner = async () => {
-    if (!linkUsername.trim()) {
-      toast.error("Voer die leerder se gebruikersnaam in");
+    if (!linkForm.name.trim() || !linkForm.surname.trim()) {
+      toast.error("Voer die leerder se naam en van in");
       return;
     }
     setLinking(true);
     try {
-      const res = await api.post("/parent/link-learner", { learner_username: linkUsername });
+      const res = await api.post("/parent/link-learner", { 
+        learner_name: linkForm.name.trim(), 
+        learner_surname: linkForm.surname.trim() 
+      });
       toast.success(res.data.message);
+      if (res.data.email_sent) {
+        toast.success("Bevestigings-e-pos gestuur!");
+      }
       // Refresh parent data
       const parentRes = await api.get("/parent/me");
       setParent(parentRes.data);
       if (!selectedLearner && parentRes.data.learners?.length > 0) {
         setSelectedLearner(parentRes.data.learners[0]);
       }
-      setLinkUsername("");
+      setLinkForm({ name: "", surname: "" });
     } catch (err) {
       toast.error(err.response?.data?.detail || "Kon nie koppel nie");
     }
