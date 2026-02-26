@@ -543,6 +543,61 @@ async def delete_text(text_id: str, current_user: dict = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Teks nie gevind nie")
     return {"message": "Teks suksesvol verwyder"}
 
+# Text Update Endpoint (Admin only)
+class TextUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    grade_level: Optional[int] = None
+    text_type: Optional[str] = None
+    questions: Optional[List[Dict[str, Any]]] = None
+
+@api_router.put("/texts/{text_id}")
+async def update_text(text_id: str, text_update: TextUpdate, current_user: dict = Depends(get_current_user)):
+    """Update an existing text (admin only)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    # Check if text exists
+    existing = await db.texts.find_one({"id": text_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Teks nie gevind nie")
+    
+    # Build update dict with only provided fields
+    update_data = {}
+    if text_update.title is not None:
+        update_data["title"] = text_update.title
+    if text_update.content is not None:
+        update_data["content"] = text_update.content
+    if text_update.grade_level is not None:
+        update_data["grade_level"] = text_update.grade_level
+    if text_update.text_type is not None:
+        update_data["text_type"] = text_update.text_type
+    if text_update.questions is not None:
+        # Process questions
+        processed_questions = []
+        for i, q in enumerate(text_update.questions):
+            processed_questions.append({
+                "id": q.get("id", str(uuid.uuid4())),
+                "question_text": q.get("question_text", ""),
+                "question_type": q.get("question_type", "typed"),
+                "options": q.get("options", []),
+                "correct_answer": q.get("correct_answer", ""),
+                "points": q.get("points", 10),
+                "order": i + 1
+            })
+        update_data["questions"] = processed_questions
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Geen velde om op te dateer nie")
+    
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.texts.update_one({"id": text_id}, {"$set": update_data})
+    
+    # Return updated text
+    updated_text = await db.texts.find_one({"id": text_id}, {"_id": 0})
+    return {"message": "Teks suksesvol opgedateer", "text": updated_text}
+
 # Export/Import Texts for Data Backup
 @api_router.get("/texts/export/all")
 async def export_all_texts(current_user: dict = Depends(get_current_user)):
