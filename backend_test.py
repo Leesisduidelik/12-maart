@@ -451,6 +451,8 @@ def main():
         tester.test_parent_registration_flow()
         tester.test_reading_analysis_endpoint()
         tester.test_invitation_codes()
+        tester.test_exercise_submission_keyword_matching()  # NEW FEATURE
+        tester.test_weekly_progress_email()  # NEW FEATURE
         
         return tester.print_summary()
         
