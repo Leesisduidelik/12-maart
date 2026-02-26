@@ -1125,12 +1125,21 @@ async def get_reading_report(learner_id: str, current_user: dict = Depends(get_c
     
     return report
 
-# Audio Analysis for Reading Aloud
+# Audio Analysis for Reading Aloud - Enhanced with detailed feedback
+class AudioAnalysisResultEnhanced(BaseModel):
+    transcription: str
+    word_count: int
+    wpm: float
+    errors: List[str]
+    quality_issues: List[str]  # New: Audio quality feedback
+    analysis_success: bool
+    feedback_message: str  # New: Overall feedback
+
 @api_router.post("/reading-aloud/analyze")
 async def analyze_reading(
     file: UploadFile = File(...),
-    text_id: str = None,
-    expected_text: str = None,
+    text_id: Optional[str] = Form(None),
+    expected_text: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     if current_user["user_type"] != "learner":
@@ -1145,10 +1154,20 @@ async def analyze_reading(
     stt = OpenAISpeechToText(api_key=api_key)
     
     # Save uploaded file temporarily
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.split('.')[-1]}") as tmp:
+    file_ext = file.filename.split('.')[-1] if file.filename else 'webm'
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
         content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
+    
+    quality_issues = []
+    analysis_success = True
+    feedback_message = ""
+    
+    # Check file size - very small files might indicate recording issues
+    file_size = len(content)
+    if file_size < 5000:  # Less than 5KB
+        quality_issues.append("Opname te kort - probeer langer praat")
     
     try:
         with open(tmp_path, "rb") as audio_file:
@@ -1160,19 +1179,56 @@ async def analyze_reading(
                 timestamp_granularities=["word"]
             )
         
-        transcription = response.text
-        duration = response.duration if hasattr(response, 'duration') else 60
-        word_count = len(transcription.split())
+        transcription = response.text.strip() if response.text else ""
+        duration = response.duration if hasattr(response, 'duration') else 0
+        word_count = len(transcription.split()) if transcription else 0
+        
+        # Quality analysis based on transcription results
+        if not transcription or word_count == 0:
+            analysis_success = False
+            quality_issues.append("Kon geen woorde herken nie - praat harder en duideliker")
+            feedback_message = "Ons kon nie jou opname ontleed nie. Maak seker jy praat hard genoeg en dat daar nie te veel agtergrondgeraas is nie."
+        elif word_count < 3 and duration > 5:
+            quality_issues.append("Te min woorde herken - moontlik te sag of agtergrondgeraas")
+            feedback_message = "Slegs 'n paar woorde herken. Probeer harder praat of verminder agtergrondgeraas."
+        elif duration < 3:
+            quality_issues.append("Opname baie kort - probeer weer met langer lees")
+        
+        # Calculate WPM
         wpm = (word_count / duration) * 60 if duration > 0 else 0
         
         # Compare with expected text to find errors
         errors = []
-        if expected_text:
+        if expected_text and transcription:
             expected_words = expected_text.lower().split()
             transcribed_words = transcription.lower().split()
+            
+            # Track reading accuracy
+            correct_count = 0
             for i, word in enumerate(expected_words):
-                if i >= len(transcribed_words) or transcribed_words[i] != word:
-                    errors.append(f"Woord {i+1}: verwag '{word}'")
+                if i < len(transcribed_words):
+                    # Simple fuzzy matching - allow for minor differences
+                    if transcribed_words[i] == word or (len(word) > 3 and word[:3] == transcribed_words[i][:3] if len(transcribed_words[i]) > 3 else False):
+                        correct_count += 1
+                    else:
+                        errors.append(f"Woord {i+1}: verwag '{word}', gehoor '{transcribed_words[i]}'")
+                else:
+                    errors.append(f"Woord {i+1}: '{word}' nie gelees nie")
+            
+            # Calculate accuracy percentage
+            if expected_words:
+                accuracy = (correct_count / len(expected_words)) * 100
+                if accuracy >= 90:
+                    feedback_message = f"Uitstekend! {accuracy:.0f}% akkuraat gelees."
+                elif accuracy >= 70:
+                    feedback_message = f"Goed gedoen! {accuracy:.0f}% akkuraat. Hou aan oefen!"
+                else:
+                    feedback_message = f"{accuracy:.0f}% akkuraat. Probeer stadiger en duideliker lees."
+        elif not feedback_message:
+            if word_count > 0:
+                feedback_message = f"{word_count} woorde herken teen {wpm:.0f} woorde per minuut."
+            else:
+                feedback_message = "Probeer weer met 'n duideliker opname."
         
         # Save exercise result
         exercise_id = str(uuid.uuid4())
@@ -1187,20 +1243,39 @@ async def analyze_reading(
             "wpm": wpm,
             "word_count": word_count,
             "errors": errors,
+            "quality_issues": quality_issues,
             "score": max(0, 100 - (len(errors) * 5)),
             "created_at": now
         }
         
         await db.exercise_results.insert_one(exercise_doc)
         
-        return AudioAnalysisResult(
-            transcription=transcription,
-            word_count=word_count,
-            wpm=round(wpm, 1),
-            errors=errors[:10]  # Limit to first 10 errors
-        )
+        return {
+            "transcription": transcription,
+            "word_count": word_count,
+            "wpm": round(wpm, 1),
+            "errors": errors[:10],  # Limit to first 10 errors
+            "quality_issues": quality_issues,
+            "analysis_success": analysis_success,
+            "feedback_message": feedback_message
+        }
+        
+    except Exception as e:
+        logger.error(f"Audio analysis error: {str(e)}")
+        return {
+            "transcription": "",
+            "word_count": 0,
+            "wpm": 0,
+            "errors": [],
+            "quality_issues": ["Fout tydens ontleding - probeer weer met 'n nuwe opname"],
+            "analysis_success": False,
+            "feedback_message": "Daar was 'n probleem met die ontleding. Maak seker die opname is duidelik en nie te kort nie."
+        }
     finally:
-        os.unlink(tmp_path)
+        try:
+            os.unlink(tmp_path)
+        except:
+            pass
 
 # Exercise Routes
 @api_router.get("/exercises/{exercise_type}")
