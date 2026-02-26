@@ -4704,7 +4704,7 @@ const AdminDashboard = ({ onLogout }) => {
                     testId="settings-contact-email"
                   />
                   <Input
-4706|                    label="Kontak Telefoon"
+                    label="Kontak Telefoon"
                     value={siteSettings.contact_phone}
                     onChange={(e) => setSiteSettings({...siteSettings, contact_phone: e.target.value})}
                     placeholder="bv. 012 345 6789"
