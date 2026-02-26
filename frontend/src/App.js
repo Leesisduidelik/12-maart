@@ -1709,9 +1709,81 @@ const ExercisePage = ({ user }) => {
                       ))}
                     </>
                   )}
-                  <Button onClick={submitAnswers} className="w-full" testId="submit-answers-btn">
-                    Dien In
-                  </Button>
+                  
+                  {/* Attempt indicator for comprehension */}
+                  {attemptNumber === 2 && !lastSubmissionResult && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
+                      <p className="text-yellow-800 font-semibold flex items-center gap-2">
+                        <RefreshCw className="w-5 h-5" />
+                        Tweede Kans - Hierdie poging tel slegs 50%
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Show result and redo option */}
+                  {lastSubmissionResult ? (
+                    <div className="space-y-4">
+                      <Card className={`${lastSubmissionResult.displayScore >= 70 ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                        <div className="text-center">
+                          <div className="text-4xl font-bold mb-2">
+                            {lastSubmissionResult.displayScore}%
+                          </div>
+                          <p className="text-text-secondary">
+                            {lastSubmissionResult.attemptNumber === 2 
+                              ? `(50% van ${lastSubmissionResult.score}% op 2de poging)` 
+                              : `${lastSubmissionResult.earned_points}/${lastSubmissionResult.total_points} punte`}
+                          </p>
+                        </div>
+                      </Card>
+                      
+                      {/* Show correct answers after 2nd attempt */}
+                      {showCorrectAnswers && currentExercise?.questions && (
+                        <Card className="bg-blue-50 border-blue-200">
+                          <h4 className="font-semibold mb-3 flex items-center gap-2">
+                            <Check className="w-5 h-5 text-blue-600" />
+                            Korrekte Antwoorde:
+                          </h4>
+                          <div className="space-y-2">
+                            {currentExercise.questions.map((q, idx) => {
+                              const userAnswer = lastSubmissionResult.graded_answers?.[idx];
+                              return (
+                                <div key={q.id || idx} className="p-3 bg-white rounded-lg">
+                                  <p className="font-medium text-sm">{idx + 1}. {q.question_text}</p>
+                                  <div className="mt-1 flex items-center gap-2">
+                                    <span className="text-sm text-green-600 font-semibold">
+                                      Antwoord: {q.correct_answer}
+                                    </span>
+                                    {userAnswer && (
+                                      <span className={`text-xs px-2 py-0.5 rounded ${userAnswer.is_correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                        {userAnswer.is_correct ? '✓ Korrek' : `✗ Jou antwoord: ${userAnswer.user_answer || '-'}`}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </Card>
+                      )}
+                      
+                      {/* Redo button - only show after first attempt, not after second */}
+                      {attemptNumber === 1 && lastSubmissionResult.score < 100 && (
+                        <Button 
+                          onClick={handleRedo} 
+                          variant="secondary" 
+                          className="w-full"
+                          testId="redo-btn"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Probeer Weer (2de kans - tel 50%)
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <Button onClick={submitAnswers} className="w-full" testId="submit-answers-btn">
+                      Dien In {attemptNumber === 2 && "(50% telling)"}
+                    </Button>
+                  )}
                 </div>
               )}
 
