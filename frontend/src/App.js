@@ -2000,7 +2000,8 @@ const ExercisePage = ({ user }) => {
                     ))
                   ) : (
                     <>
-                      {[1, 2, 3].map((num) => (
+                      {/* Listening: 5 questions */}
+                      {[1, 2, 3, 4, 5].map((num) => (
                         <Input
                           key={num}
                           label={`Antwoord ${num}`}
