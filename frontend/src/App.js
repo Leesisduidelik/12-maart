@@ -1417,6 +1417,11 @@ const ExercisePage = ({ user }) => {
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   
+  // Redo functionality state
+  const [attemptNumber, setAttemptNumber] = useState(1);
+  const [lastSubmissionResult, setLastSubmissionResult] = useState(null);
+  const [showCorrectAnswers, setShowCorrectAnswers] = useState(false);
+  
   const exerciseType = window.location.pathname.split("/").pop();
   const typeLabels = {
     comprehension: "Begrip",
@@ -1441,6 +1446,14 @@ const ExercisePage = ({ user }) => {
       })
       .finally(() => setLoading(false));
   }, [exerciseType, navigate]);
+
+  // Reset state when exercise changes
+  useEffect(() => {
+    setAttemptNumber(1);
+    setLastSubmissionResult(null);
+    setShowCorrectAnswers(false);
+    setAnswers([]);
+  }, [currentExercise?.id]);
 
   const startRecording = async () => {
     try {
@@ -1485,8 +1498,12 @@ const ExercisePage = ({ user }) => {
         headers: { "Content-Type": "multipart/form-data" }
       });
       setAnalysisResult(res.data);
-      confetti({ particleCount: 50, spread: 60 });
-      toast.success("Goed gedoen!");
+      if (res.data.analysis_success) {
+        confetti({ particleCount: 50, spread: 60 });
+        toast.success("Goed gedoen!");
+      } else {
+        toast.error(res.data.feedback_message || "Probeer weer");
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || "Kon nie ontleed nie");
     }
@@ -1496,13 +1513,46 @@ const ExercisePage = ({ user }) => {
     try {
       const res = await api.post("/exercises/submit", {
         exercise_id: currentExercise.id,
-        answers: answers
+        answers: answers,
+        attempt_number: attemptNumber
       });
-      toast.success(res.data.message);
+      
+      // Calculate displayed score - 50% max on second attempt
+      let displayScore = res.data.score;
+      if (attemptNumber === 2) {
+        displayScore = Math.round(res.data.score * 0.5);
+      }
+      
+      setLastSubmissionResult({
+        ...res.data,
+        displayScore,
+        attemptNumber
+      });
+      
+      if (attemptNumber === 2) {
+        // Show correct answers after second attempt
+        setShowCorrectAnswers(true);
+        toast.success(`Tweede poging: ${displayScore}% (50% van ${res.data.score}%)`);
+      } else {
+        toast.success(res.data.message);
+      }
+      
       confetti({ particleCount: 50, spread: 60 });
     } catch (err) {
       toast.error("Kon nie indien nie");
     }
+  };
+
+  // Handle redo - second attempt
+  const handleRedo = () => {
+    if (attemptNumber >= 2) {
+      toast.error("Jy het reeds twee kanse gehad");
+      return;
+    }
+    setAttemptNumber(2);
+    setAnswers([]);
+    setLastSubmissionResult(null);
+    toast.info("Tweede kans! Let op: Hierdie poging tel slegs 50%");
   };
 
   if (loading) {
