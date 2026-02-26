@@ -1309,6 +1309,39 @@ async def submit_exercise(submission: ExerciseSubmission, current_user: dict = D
     exercise_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
+    # Helper function for keyword matching (for typed answers)
+    def check_keyword_match(user_answer: str, correct_answer: str) -> tuple[bool, float]:
+        """
+        Check if user answer contains key words from correct answer.
+        Returns (is_correct, match_percentage)
+        """
+        if not user_answer or not correct_answer:
+            return False, 0.0
+        
+        # Clean and normalize both answers
+        user_words = set(user_answer.lower().strip().split())
+        correct_words = set(correct_answer.lower().strip().split())
+        
+        # Remove common Afrikaans stop words
+        stop_words = {'die', 'n', "'n", 'is', 'en', 'van', 'het', 'dat', 'om', 'te', 'met', 'vir', 'op', 'sy', 'haar', 'hulle', 'ons', 'jy', 'ek', 'was', 'word', 'kan', 'sal', 'moet'}
+        
+        # Get meaningful keywords (not stop words, at least 3 chars)
+        user_keywords = {w for w in user_words if w not in stop_words and len(w) >= 3}
+        correct_keywords = {w for w in correct_words if w not in stop_words and len(w) >= 3}
+        
+        if not correct_keywords:
+            # If no keywords after filtering, do simple contains check
+            return correct_answer.lower() in user_answer.lower() or user_answer.lower() in correct_answer.lower(), 1.0 if (correct_answer.lower() in user_answer.lower() or user_answer.lower() in correct_answer.lower()) else 0.0
+        
+        # Count how many keywords match
+        matching_keywords = user_keywords.intersection(correct_keywords)
+        match_percentage = len(matching_keywords) / len(correct_keywords) if correct_keywords else 0
+        
+        # Consider correct if >= 60% of keywords match, or exact match
+        is_correct = match_percentage >= 0.6 or user_answer.lower().strip() == correct_answer.lower().strip()
+        
+        return is_correct, match_percentage
+    
     # Auto-grade answers against correct answers
     total_points = 0
     earned_points = 0
@@ -1319,16 +1352,22 @@ async def submit_exercise(submission: ExerciseSubmission, current_user: dict = D
         
         for answer in submission.answers:
             q_id = answer.get("question_id")
-            user_answer = answer.get("answer", "").strip().lower()
+            user_answer = answer.get("answer", "").strip()
             
             if q_id in questions:
                 question = questions[q_id]
-                correct_answer = question.get("correct_answer", "").strip().lower()
+                correct_answer = question.get("correct_answer", "").strip()
                 points = question.get("points", 10)
                 total_points += points
+                question_type = question.get("question_type", "typed")
                 
-                # Check if answer is correct
-                is_correct = user_answer == correct_answer
+                # For multiple choice - exact match required
+                if question_type == "multiple_choice":
+                    is_correct = user_answer.lower() == correct_answer.lower()
+                else:
+                    # For typed answers - use keyword matching
+                    is_correct, match_pct = check_keyword_match(user_answer, correct_answer)
+                
                 if is_correct:
                     earned_points += points
                 
