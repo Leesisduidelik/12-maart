@@ -110,7 +110,8 @@ class ParentLogin(BaseModel):
     password: str
 
 class ParentLinkLearner(BaseModel):
-    learner_username: str
+    learner_name: str  # Full name of learner
+    learner_surname: str  # Surname of learner
 
 class TokenResponse(BaseModel):
     access_token: str
