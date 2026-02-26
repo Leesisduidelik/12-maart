@@ -1852,6 +1852,225 @@ async def get_linked_learner_progress(learner_id: str, current_user: dict = Depe
         "subscription": subscription
     }
 
+# Weekly Progress Email for Parents
+@api_router.post("/parent/send-weekly-progress")
+async def send_weekly_progress_email(current_user: dict = Depends(get_current_user)):
+    """Send weekly progress summary to parent via email (requires password auth only, no OTP)"""
+    parent = await db.parents.find_one({"id": current_user.get("user_id")})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Ouer nie gevind nie")
+    
+    if not parent.get("email"):
+        raise HTTPException(status_code=400, detail="Geen e-pos adres gekoppel nie")
+    
+    if not resend.api_key:
+        raise HTTPException(status_code=503, detail="E-pos diens nie beskikbaar nie")
+    
+    # Get all linked learners
+    linked_ids = parent.get("linked_learners", [])
+    if not linked_ids:
+        raise HTTPException(status_code=400, detail="Geen leerders gekoppel nie")
+    
+    # Get progress for each learner (last 7 days)
+    from datetime import timedelta
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    
+    learner_summaries = []
+    for learner_id in linked_ids:
+        learner = await db.learners.find_one({"id": learner_id}, {"_id": 0, "password_hash": 0})
+        if not learner:
+            continue
+        
+        # Get exercises completed this week
+        results = await db.exercise_results.find({
+            "learner_id": learner_id,
+            "created_at": {"$gte": week_ago}
+        }, {"_id": 0}).to_list(100)
+        
+        # Calculate stats
+        total_exercises = len(results)
+        avg_score = round(sum(r.get("score", 0) for r in results) / total_exercises) if total_exercises > 0 else 0
+        
+        # Count by type
+        type_counts = {}
+        for r in results:
+            t = r.get("exercise_type", "ander")
+            type_counts[t] = type_counts.get(t, 0) + 1
+        
+        learner_summaries.append({
+            "name": f"{learner.get('name', '')} {learner.get('surname', '')}",
+            "grade": learner.get("grade", "?"),
+            "total_exercises": total_exercises,
+            "avg_score": avg_score,
+            "type_counts": type_counts
+        })
+    
+    # Build email HTML
+    type_labels = {
+        "comprehension": "Begrip",
+        "reading_aloud": "Hardoplees",
+        "listening": "Luister",
+        "spelling": "Spelling"
+    }
+    
+    learner_html = ""
+    for ls in learner_summaries:
+        type_breakdown = ", ".join([f"{type_labels.get(t, t)}: {c}" for t, c in ls["type_counts"].items()]) or "Geen"
+        learner_html += f"""
+        <div style="background: #f8f9fa; border-radius: 12px; padding: 20px; margin-bottom: 15px;">
+            <h3 style="margin: 0 0 10px 0; color: #4A90A4;">{ls['name']} (Graad {ls['grade']})</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 8px 0;"><strong>Oefeninge voltooi:</strong></td>
+                    <td style="padding: 8px 0; text-align: right;">{ls['total_exercises']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0;"><strong>Gemiddelde telling:</strong></td>
+                    <td style="padding: 8px 0; text-align: right; color: {'#28a745' if ls['avg_score'] >= 70 else '#ffc107'};">{ls['avg_score']}%</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0;"><strong>Oefening tipes:</strong></td>
+                    <td style="padding: 8px 0; text-align: right;">{type_breakdown}</td>
+                </tr>
+            </table>
+        </div>
+        """
+    
+    email_html = f"""
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #ffffff;">
+        <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #4A90A4; margin: 0;">📚 Lees is Duidelik</h1>
+            <p style="color: #6c757d; margin: 5px 0;">Weeklikse Vordering Opsomming</p>
+        </div>
+        
+        <p style="font-size: 16px;">Goeiedag {parent['name']},</p>
+        <p style="color: #495057;">Hier is 'n opsomming van jou kind(ers) se vordering die afgelope week:</p>
+        
+        {learner_html if learner_html else '<p style="color: #6c757d;">Geen aktiwiteit die week nie.</p>'}
+        
+        <div style="margin-top: 30px; padding: 20px; background: linear-gradient(135deg, #4A90A4 0%, #6DB193 100%); border-radius: 12px; color: white; text-align: center;">
+            <p style="margin: 0; font-size: 14px;">💡 Tip: Moedig jou kind aan om elke dag ten minste een oefening te doen!</p>
+        </div>
+        
+        <p style="margin-top: 30px; color: #6c757d; font-size: 14px;">
+            Met vriendelike groete,<br/>
+            Die Lees is Duidelik span
+        </p>
+    </div>
+    """
+    
+    try:
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": SENDER_EMAIL,
+            "to": [parent["email"]],
+            "subject": "📚 Weeklikse Vordering - Lees is Duidelik",
+            "html": email_html
+        })
+        
+        # Log that email was sent
+        await db.email_logs.insert_one({
+            "id": str(uuid.uuid4()),
+            "parent_id": parent["id"],
+            "email_type": "weekly_progress",
+            "sent_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {"message": "Weeklikse opsomming e-pos gestuur!", "email": parent["email"]}
+    except Exception as e:
+        logger.error(f"Failed to send weekly progress email: {str(e)}")
+        raise HTTPException(status_code=500, detail="Kon nie e-pos stuur nie")
+
+# Scheduled task endpoint for cron to send all weekly emails
+@api_router.post("/admin/send-all-weekly-progress")
+async def send_all_weekly_progress(current_user: dict = Depends(get_current_user)):
+    """Admin endpoint to trigger weekly progress emails for all parents (for cron job)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    if not resend.api_key:
+        raise HTTPException(status_code=503, detail="E-pos diens nie beskikbaar nie - stel RESEND_API_KEY in")
+    
+    # Get all parents with email addresses
+    parents = await db.parents.find(
+        {"email": {"$exists": True, "$ne": ""}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    sent_count = 0
+    failed_count = 0
+    
+    for parent in parents:
+        if not parent.get("linked_learners"):
+            continue
+        
+        try:
+            # Simulate the request for each parent
+            # Get progress for each learner
+            from datetime import timedelta
+            week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+            
+            learner_summaries = []
+            for learner_id in parent.get("linked_learners", []):
+                learner = await db.learners.find_one({"id": learner_id}, {"_id": 0, "password_hash": 0})
+                if not learner:
+                    continue
+                
+                results = await db.exercise_results.find({
+                    "learner_id": learner_id,
+                    "created_at": {"$gte": week_ago}
+                }, {"_id": 0}).to_list(100)
+                
+                total_exercises = len(results)
+                if total_exercises == 0:
+                    continue
+                
+                avg_score = round(sum(r.get("score", 0) for r in results) / total_exercises)
+                
+                learner_summaries.append({
+                    "name": f"{learner.get('name', '')} {learner.get('surname', '')}",
+                    "grade": learner.get("grade", "?"),
+                    "total_exercises": total_exercises,
+                    "avg_score": avg_score
+                })
+            
+            if not learner_summaries:
+                continue  # No activity this week
+            
+            # Simple email for bulk sending
+            learner_html = "".join([
+                f"<li><strong>{ls['name']}</strong>: {ls['total_exercises']} oefeninge, {ls['avg_score']}% gemiddeld</li>"
+                for ls in learner_summaries
+            ])
+            
+            email_html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #4A90A4;">📚 Weeklikse Vordering</h2>
+                <p>Goeiedag {parent['name']},</p>
+                <p>Hier is 'n opsomming van die afgelope week:</p>
+                <ul>{learner_html}</ul>
+                <p>Met vriendelike groete,<br/>Lees is Duidelik</p>
+            </div>
+            """
+            
+            await asyncio.to_thread(resend.Emails.send, {
+                "from": SENDER_EMAIL,
+                "to": [parent["email"]],
+                "subject": "📚 Weeklikse Vordering - Lees is Duidelik",
+                "html": email_html
+            })
+            sent_count += 1
+            
+        except Exception as e:
+            logger.error(f"Failed to send email to {parent.get('email')}: {str(e)}")
+            failed_count += 1
+    
+    return {
+        "message": f"Weeklikse e-posse gestuur",
+        "sent": sent_count,
+        "failed": failed_count,
+        "total_parents": len(parents)
+    }
+
 # Parent Portal Routes (Legacy - Admin generated links)
 @api_router.post("/parent/generate-link")
 async def generate_parent_link(data: ParentLinkCreate, current_user: dict = Depends(get_current_user)):
