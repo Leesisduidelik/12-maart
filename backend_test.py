@@ -96,7 +96,7 @@ class APITester:
             "POST",
             "auth/admin/login",
             200,  # Should succeed if admin credentials are set
-            data={"email": "admin@example.com", "password": "admin123"}
+            data={"email": "admin@leesisduidelik.com", "password": "admin123"}
         )
         
         if success and 'access_token' in response:
