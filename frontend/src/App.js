@@ -1619,27 +1619,72 @@ const ExercisePage = ({ user }) => {
                   )}
                   
                   {analysisResult && (
-                    <Card className="bg-primary-50 border-primary-500">
-                      <h3 className="font-heading font-bold mb-2">Jou Resultaat</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <div className="text-2xl font-bold text-primary-500">{analysisResult.wpm}</div>
-                          <div className="text-sm text-text-muted">WPM</div>
+                    <Card className={`${analysisResult.analysis_success ? 'bg-primary-50 border-primary-500' : 'bg-yellow-50 border-yellow-500'}`}>
+                      <h3 className="font-heading font-bold mb-2">
+                        {analysisResult.analysis_success ? 'Jou Resultaat' : 'Kon Nie Ontleed Nie'}
+                      </h3>
+                      
+                      {/* Feedback message */}
+                      {analysisResult.feedback_message && (
+                        <div className={`p-3 rounded-lg mb-4 ${analysisResult.analysis_success ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                          <p className="font-medium">{analysisResult.feedback_message}</p>
                         </div>
-                        <div>
-                          <div className="text-2xl font-bold text-secondary-500">{analysisResult.word_count}</div>
-                          <div className="text-sm text-text-muted">Woorde</div>
-                        </div>
-                      </div>
-                      {analysisResult.errors?.length > 0 && (
-                        <div className="mt-4">
-                          <p className="text-sm font-semibold">Moontlike foute:</p>
-                          <ul className="text-sm text-text-muted">
-                            {analysisResult.errors.slice(0, 5).map((e, i) => (
-                              <li key={i}>{e}</li>
+                      )}
+                      
+                      {/* Quality issues - show prominently */}
+                      {analysisResult.quality_issues?.length > 0 && (
+                        <div className="bg-accent-50 border border-accent-200 rounded-lg p-3 mb-4">
+                          <p className="text-sm font-semibold text-accent-700 mb-2">Probleme met opname:</p>
+                          <ul className="space-y-1">
+                            {analysisResult.quality_issues.map((issue, i) => (
+                              <li key={i} className="text-sm text-accent-600 flex items-start gap-2">
+                                <span className="text-accent-500">⚠️</span>
+                                {issue}
+                              </li>
                             ))}
                           </ul>
                         </div>
+                      )}
+                      
+                      {analysisResult.analysis_success && (
+                        <>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <div className="text-2xl font-bold text-primary-500">{analysisResult.wpm}</div>
+                              <div className="text-sm text-text-muted">WPM</div>
+                            </div>
+                            <div>
+                              <div className="text-2xl font-bold text-secondary-500">{analysisResult.word_count}</div>
+                              <div className="text-sm text-text-muted">Woorde</div>
+                            </div>
+                          </div>
+                          
+                          {analysisResult.errors?.length > 0 && (
+                            <div className="mt-4">
+                              <p className="text-sm font-semibold">Moontlike foute:</p>
+                              <ul className="text-sm text-text-muted">
+                                {analysisResult.errors.slice(0, 5).map((e, i) => (
+                                  <li key={i}>{e}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      
+                      {/* Try again button if failed */}
+                      {!analysisResult.analysis_success && (
+                        <Button 
+                          onClick={() => {
+                            setAnalysisResult(null);
+                            setAudioBlob(null);
+                          }} 
+                          className="w-full mt-4"
+                          testId="retry-recording-btn"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Probeer Weer
+                        </Button>
                       )}
                     </Card>
                   )}
