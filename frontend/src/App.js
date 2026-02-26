@@ -1037,6 +1037,7 @@ const ParentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [linkForm, setLinkForm] = useState({ name: "", surname: "" });
   const [linking, setLinking] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     api.get("/parent/me")
@@ -1061,6 +1062,18 @@ const ParentDashboard = () => {
         .catch(console.error);
     }
   }, [selectedLearner]);
+
+  // Send weekly progress email
+  const sendWeeklyEmail = async () => {
+    setSendingEmail(true);
+    try {
+      const res = await api.post("/parent/send-weekly-progress");
+      toast.success(res.data.message);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Kon nie e-pos stuur nie");
+    }
+    setSendingEmail(false);
+  };
 
   const handleLinkLearner = async () => {
     if (!linkForm.name.trim() || !linkForm.surname.trim()) {
