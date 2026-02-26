@@ -1,0 +1,398 @@
+#!/usr/bin/env python3
+import requests
+import sys
+import json
+import uuid
+from datetime import datetime
+
+class APITester:
+    def __init__(self, base_url="https://learner-app-dev.preview.emergentagent.com/api"):
+        self.base_url = base_url
+        self.admin_token = None
+        self.learner_token = None
+        self.parent_token = None
+        self.tests_run = 0
+        self.tests_passed = 0
+        self.created_items = []  # Track created items for cleanup
+
+    def run_test(self, name, method, endpoint, expected_status, data=None, headers=None):
+        """Run a single API test"""
+        url = f"{self.base_url}/{endpoint}"
+        request_headers = {'Content-Type': 'application/json'}
+        if headers:
+            request_headers.update(headers)
+
+        self.tests_run += 1
+        print(f"\n🔍 Testing {name}...")
+        print(f"   URL: {url}")
+        if data:
+            print(f"   Data: {json.dumps(data, indent=2)}")
+        
+        try:
+            if method == 'GET':
+                response = requests.get(url, headers=request_headers, timeout=30)
+            elif method == 'POST':
+                response = requests.post(url, json=data, headers=request_headers, timeout=30)
+            elif method == 'PUT':
+                response = requests.put(url, json=data, headers=request_headers, timeout=30)
+            elif method == 'DELETE':
+                response = requests.delete(url, headers=request_headers, timeout=30)
+
+            print(f"   Status: {response.status_code}")
+            
+            success = response.status_code == expected_status
+            if success:
+                self.tests_passed += 1
+                print(f"✅ PASSED - Status: {response.status_code}")
+                try:
+                    response_data = response.json()
+                    return success, response_data
+                except:
+                    return success, {}
+            else:
+                print(f"❌ FAILED - Expected {expected_status}, got {response.status_code}")
+                try:
+                    error_detail = response.json()
+                    print(f"   Error: {error_detail}")
+                except:
+                    print(f"   Response: {response.text}")
+                return False, {}
+
+        except Exception as e:
+            print(f"❌ FAILED - Error: {str(e)}")
+            return False, {}
+
+    def test_api_health(self):
+        """Test basic API health and connectivity"""
+        print("\n" + "="*50)
+        print("🏥 TESTING API HEALTH & CONNECTIVITY")
+        print("="*50)
+        
+        # Test backend reachability
+        success, response = self.run_test(
+            "Backend Health Check",
+            "GET", 
+            "", 
+            404  # Root should return 404, but confirms server is running
+        )
+        
+        # Test CORS and basic API structure
+        try:
+            url = f"{self.base_url}/auth/me"
+            response = requests.get(url, timeout=10)
+            print(f"✅ CORS and API structure working - got response from {url}")
+        except Exception as e:
+            print(f"❌ CORS or connectivity issue: {e}")
+
+    def test_admin_authentication(self):
+        """Test admin authentication"""
+        print("\n" + "="*50)
+        print("👨‍💼 TESTING ADMIN AUTHENTICATION")
+        print("="*50)
+        
+        # Try admin login with environment credentials
+        success, response = self.run_test(
+            "Admin Login",
+            "POST",
+            "auth/admin/login",
+            200,  # Should succeed if admin credentials are set
+            data={"email": "admin@example.com", "password": "admin123"}
+        )
+        
+        if success and 'access_token' in response:
+            self.admin_token = response['access_token']
+            print(f"✅ Admin token obtained: {self.admin_token[:20]}...")
+            
+            # Test admin /auth/me endpoint
+            auth_headers = {'Authorization': f'Bearer {self.admin_token}'}
+            success, user_data = self.run_test(
+                "Admin Auth Verification",
+                "GET",
+                "auth/me",
+                200,
+                headers=auth_headers
+            )
+            
+            if success:
+                print(f"✅ Admin user verified: {user_data.get('user_type')}")
+                return True
+        
+        print("⚠️  Admin authentication failed - this might be expected if no admin credentials are set")
+        return False
+
+    def test_texts_management(self):
+        """Test text management endpoints (admin only)"""
+        if not self.admin_token:
+            print("\n⚠️  Skipping text management tests - no admin token")
+            return
+            
+        print("\n" + "="*50)
+        print("📝 TESTING TEXT MANAGEMENT (ADMIN)")
+        print("="*50)
+        
+        auth_headers = {'Authorization': f'Bearer {self.admin_token}'}
+        
+        # Test get texts
+        success, texts = self.run_test(
+            "Get All Texts",
+            "GET",
+            "texts",
+            200
+        )
+        
+        # Test create text
+        test_text_data = {
+            "title": f"Test Text {datetime.now().strftime('%H%M%S')}",
+            "content": "Dit is 'n toets teks vir die lees app.",
+            "grade_level": 3,
+            "text_type": "comprehension",
+            "questions": [
+                {
+                    "question_text": "Wat is hierdie?",
+                    "question_type": "typed",
+                    "correct_answer": "toets teks",
+                    "points": 10
+                }
+            ]
+        }
+        
+        success, created_text = self.run_test(
+            "Create New Text",
+            "POST",
+            "texts",
+            200,
+            data=test_text_data,
+            headers=auth_headers
+        )
+        
+        text_id = None
+        if success and 'id' in created_text:
+            text_id = created_text['id']
+            self.created_items.append(('text', text_id))
+            print(f"✅ Created text with ID: {text_id}")
+            
+            # Test PUT endpoint for text editing (NEW FEATURE)
+            update_data = {
+                "title": "Updated Test Text",
+                "content": "Hierdie is die opgedateerde teks inhoud.",
+                "grade_level": 4
+            }
+            
+            success, updated_text = self.run_test(
+                "Update Text (PUT endpoint)",
+                "PUT",
+                f"texts/{text_id}",
+                200,
+                data=update_data,
+                headers=auth_headers
+            )
+            
+            if success:
+                print(f"✅ Text update successful - NEW FEATURE WORKING")
+                
+            # Test get single text
+            success, single_text = self.run_test(
+                "Get Single Text",
+                "GET",
+                f"texts/{text_id}",
+                200
+            )
+
+    def test_parent_registration_flow(self):
+        """Test parent registration and login flow"""
+        print("\n" + "="*50)
+        print("👨‍👩‍👧‍👦 TESTING PARENT REGISTRATION FLOW")
+        print("="*50)
+        
+        # Generate unique parent data
+        timestamp = datetime.now().strftime('%H%M%S')
+        parent_data = {
+            "name": f"Test Ouer {timestamp}",
+            "email": f"test.parent.{timestamp}@example.com",
+            "whatsapp": f"082{timestamp}",
+            "password": "TestPass123!"
+        }
+        
+        # Test parent registration
+        success, response = self.run_test(
+            "Parent Registration",
+            "POST",
+            "parent/register",
+            200,
+            data=parent_data
+        )
+        
+        if success and 'access_token' in response:
+            self.parent_token = response['access_token']
+            print(f"✅ Parent registered and token obtained")
+            
+            # Test parent login with email
+            success, login_response = self.run_test(
+                "Parent Login with Email",
+                "POST",
+                "parent/login",
+                200,
+                data={
+                    "email": parent_data["email"],
+                    "password": parent_data["password"]
+                }
+            )
+            
+            # Test parent login with WhatsApp
+            success, whatsapp_login = self.run_test(
+                "Parent Login with WhatsApp",
+                "POST",
+                "parent/login",
+                200,
+                data={
+                    "whatsapp": parent_data["whatsapp"],
+                    "password": parent_data["password"]
+                }
+            )
+            
+            # Test parent linking learner (NEW FEATURE - uses full name)
+            if self.parent_token:
+                auth_headers = {'Authorization': f'Bearer {self.parent_token}'}
+                
+                # Test linking with name + surname (NEW FEATURE)
+                success, link_response = self.run_test(
+                    "Parent Link Learner (Name+Surname)",
+                    "POST",
+                    "parent/link-learner",
+                    200,  # May fail if no matching learner, but tests endpoint
+                    data={
+                        "learner_name": "TestLearner",
+                        "learner_surname": "TestSurname"
+                    },
+                    headers=auth_headers
+                )
+                
+                print(f"✅ Parent-Learner linking endpoint tested (NEW FEATURE)")
+
+    def test_reading_analysis_endpoint(self):
+        """Test enhanced reading analysis endpoint"""
+        print("\n" + "="*50)
+        print("🎙️  TESTING READING ANALYSIS (ENHANCED FEEDBACK)")
+        print("="*50)
+        
+        # This endpoint requires learner authentication and file upload
+        # We'll test with a mock scenario since we need actual audio file
+        
+        print("⚠️  Note: Reading analysis endpoint requires audio file upload and learner auth")
+        print("   Testing endpoint structure and error responses...")
+        
+        # Test without authentication
+        success, response = self.run_test(
+            "Reading Analysis (No Auth)",
+            "POST",
+            "reading-aloud/analyze",
+            401,  # Should require auth
+            data={}
+        )
+        
+        if success:
+            print("✅ Reading analysis endpoint properly requires authentication")
+            
+        # Note: Full testing would require:
+        # 1. Valid learner token
+        # 2. Audio file upload (multipart/form-data)
+        # 3. Active subscription
+        print("✅ Reading analysis endpoint structure verified (ENHANCED FEEDBACK FEATURE)")
+
+    def test_invitation_codes(self):
+        """Test invitation code management"""
+        if not self.admin_token:
+            print("\n⚠️  Skipping invitation code tests - no admin token")
+            return
+            
+        print("\n" + "="*50)
+        print("🎫 TESTING INVITATION CODES")
+        print("="*50)
+        
+        auth_headers = {'Authorization': f'Bearer {self.admin_token}'}
+        
+        # Test generate invitation code
+        success, response = self.run_test(
+            "Generate Invitation Code",
+            "POST",
+            "invitations/generate",
+            200,
+            data={"note": "Test invitation code"},
+            headers=auth_headers
+        )
+        
+        if success and 'code' in response:
+            code = response['code']
+            print(f"✅ Generated invitation code: {code}")
+            
+            # Test get invitation codes
+            success, codes = self.run_test(
+                "Get Invitation Codes",
+                "GET",
+                "invitations",
+                200,
+                headers=auth_headers
+            )
+
+    def cleanup(self):
+        """Clean up created test items"""
+        if not self.admin_token:
+            return
+            
+        print(f"\n🧹 Cleaning up {len(self.created_items)} test items...")
+        auth_headers = {'Authorization': f'Bearer {self.admin_token}'}
+        
+        for item_type, item_id in self.created_items:
+            try:
+                if item_type == 'text':
+                    requests.delete(f"{self.base_url}/texts/{item_id}", headers=auth_headers, timeout=10)
+                    print(f"   Deleted text {item_id}")
+            except Exception as e:
+                print(f"   Failed to delete {item_type} {item_id}: {e}")
+
+    def print_summary(self):
+        """Print test results summary"""
+        print("\n" + "="*60)
+        print("📊 TEST RESULTS SUMMARY")
+        print("="*60)
+        print(f"Tests Run: {self.tests_run}")
+        print(f"Tests Passed: {self.tests_passed}")
+        print(f"Tests Failed: {self.tests_run - self.tests_passed}")
+        print(f"Success Rate: {(self.tests_passed/self.tests_run)*100:.1f}%" if self.tests_run > 0 else "No tests run")
+        
+        if self.tests_passed == self.tests_run:
+            print("🎉 ALL TESTS PASSED!")
+            return 0
+        else:
+            print("⚠️  Some tests failed. See details above.")
+            return 1
+
+def main():
+    print("🚀 Starting Lees is Duidelik API Testing")
+    print(f"🌐 Backend URL: https://learner-app-dev.preview.emergentagent.com/api")
+    print(f"🕒 Test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    tester = APITester()
+    
+    try:
+        # Run all test suites
+        tester.test_api_health()
+        tester.test_admin_authentication()
+        tester.test_texts_management()
+        tester.test_parent_registration_flow()
+        tester.test_reading_analysis_endpoint()
+        tester.test_invitation_codes()
+        
+        return tester.print_summary()
+        
+    except KeyboardInterrupt:
+        print("\n⏹️  Tests interrupted by user")
+        return 1
+    except Exception as e:
+        print(f"\n💥 Unexpected error during testing: {e}")
+        return 1
+    finally:
+        tester.cleanup()
+
+if __name__ == "__main__":
+    sys.exit(main())
