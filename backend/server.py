@@ -35,6 +35,10 @@ ACCESS_TOKEN_EXPIRE_DAYS = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
+# Resend Email Setup
+resend.api_key = os.environ.get('RESEND_API_KEY', '')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+
 # Create the main app
 app = FastAPI(title="Lees is Duidelik API")
 api_router = APIRouter(prefix="/api")
