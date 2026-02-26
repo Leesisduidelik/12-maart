@@ -2775,10 +2775,80 @@ const TextsTab = ({ texts, setTexts }) => {
           )}
         </div>
 
+        {/* Note for listening/spelling tests */}
+        {(newText.text_type === "listening" || newText.text_type === "spelling") && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-700">
+              <strong>📢 Nota:</strong> Nadat jy die teks gestoor het, kan jy oudio oplaai of opneem. 
+              Scroll af na die gestoorde teks en klik op die oudio knoppies.
+            </p>
+          </div>
+        )}
+
         <Button onClick={handleCreateText} className="mt-4 w-full" testId="save-text-btn">
           Stoor Teks
         </Button>
       </Card>
+
+      {/* Quick Audio Upload Section - Shows texts that need audio */}
+      {texts.filter(t => (t.text_type === "listening" || t.text_type === "spelling") && !t.audio_url).length > 0 && (
+        <Card className="bg-yellow-50 border-yellow-200" testId="needs-audio-section">
+          <h4 className="font-semibold text-yellow-800 mb-3">⚠️ Tekste wat Oudio Benodig</h4>
+          <div className="space-y-3">
+            {texts.filter(t => (t.text_type === "listening" || t.text_type === "spelling") && !t.audio_url).map(text => (
+              <div key={text.id} className="bg-white rounded-lg p-3 border">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <span className="font-medium">{text.title}</span>
+                    <span className="text-xs text-text-muted ml-2">
+                      (Graad {text.grade_level} | {textTypeLabels[text.text_type]})
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    id={`quick-audio-${text.id}`}
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && handleAudioUpload(text.id, e.target.files[0])}
+                  />
+                  <button
+                    onClick={() => document.getElementById(`quick-audio-${text.id}`)?.click()}
+                    className="flex items-center gap-2 px-3 py-2 bg-primary-500 text-white rounded-lg text-sm hover:bg-primary-600 transition-colors"
+                    disabled={uploadingAudio === text.id}
+                    data-testid={`quick-upload-${text.id}`}
+                  >
+                    <Upload className="w-4 h-4" />
+                    {uploadingAudio === text.id ? "Laai op..." : "Laai Oudio Op"}
+                  </button>
+                  
+                  {isRecording && recordingTextId === text.id ? (
+                    <button
+                      onClick={stopRecording}
+                      className="flex items-center gap-2 px-3 py-2 bg-accent-500 text-white rounded-lg text-sm hover:bg-accent-600 transition-colors animate-pulse"
+                      data-testid={`quick-stop-${text.id}`}
+                    >
+                      <Pause className="w-4 h-4" />
+                      Stop Opname
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => startRecording(text.id)}
+                      className="flex items-center gap-2 px-3 py-2 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600 transition-colors"
+                      disabled={isRecording}
+                      data-testid={`quick-record-${text.id}`}
+                    >
+                      <Mic className="w-4 h-4" />
+                      Neem Op
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Export/Import Section */}
       <Card className="bg-slate-50" testId="export-import-section">
