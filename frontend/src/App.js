@@ -2662,80 +2662,171 @@ const TextsTab = ({ texts, setTexts }) => {
           ) : (
             texts.map(text => (
               <Card key={text.id} testId={`text-${text.id}`}>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold">{text.title}</h4>
-                      {text.audio_url && <Volume2 className="w-4 h-4 text-primary-500" title="Het oudio" />}
-                    </div>
-                    <p className="text-sm text-text-muted">
-                      Graad {text.grade_level} | {textTypeLabels[text.text_type] || text.text_type} | 
-                      {text.is_ai_generated ? " AI" : " Handmatig"}
-                      {text.questions?.length > 0 && ` | ${text.questions.length} vrae`}
-                    </p>
-                    
-                    <button
-                      onClick={() => setExpandedText(expandedText === text.id ? null : text.id)}
-                      className="text-sm text-primary-500 mt-1 flex items-center gap-1"
-                    >
-                      {expandedText === text.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      {expandedText === text.id ? "Versteek" : "Wys meer"}
-                    </button>
-                    
-                    {expandedText === text.id && (
-                      <div className="mt-3 bg-slate-50 rounded-lg p-3">
-                        <p className="text-sm whitespace-pre-wrap">{text.content}</p>
-                        
-                        {text.questions?.length > 0 && (
-                          <div className="mt-3 border-t pt-3">
-                            <p className="text-sm font-semibold mb-2">Vrae:</p>
-                            {text.questions.map((q, i) => (
-                              <div key={q.id || i} className="text-sm mb-2">
-                                <span className="font-medium">{i + 1}. {q.question_text}</span>
-                                <span className="text-text-muted ml-2">(Antw: {q.correct_answer})</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Audio Upload for Listening/Spelling */}
-                        {(text.text_type === "listening" || text.text_type === "spelling") && (
-                          <div className="mt-3 border-t pt-3">
-                            <p className="text-sm font-semibold mb-2">Oudio Opname:</p>
-                            {text.audio_url ? (
-                              <audio controls src={`${BACKEND_URL}${text.audio_url}`} className="w-full" />
-                            ) : (
-                              <p className="text-sm text-text-muted">Geen oudio opgelaai nie</p>
-                            )}
-                            <input
-                              type="file"
-                              accept="audio/*"
-                              ref={audioInputRef}
-                              className="hidden"
-                              onChange={(e) => e.target.files?.[0] && handleAudioUpload(text.id, e.target.files[0])}
-                            />
-                            <button
-                              onClick={() => audioInputRef.current?.click()}
-                              className="mt-2 flex items-center gap-2 text-sm text-primary-500 hover:underline"
-                              disabled={uploadingAudio === text.id}
-                              data-testid={`upload-audio-${text.id}`}
-                            >
-                              <Upload className="w-4 h-4" />
-                              {uploadingAudio === text.id ? "Laai op..." : text.audio_url ? "Vervang Oudio" : "Laai Oudio Op"}
-                            </button>
-                          </div>
-                        )}
+                {editingText === text.id ? (
+                  /* Edit Mode */
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-primary-500">Wysig Teks</h4>
+                    <Input
+                      label="Titel"
+                      value={editForm.title}
+                      onChange={(e) => setEditForm({...editForm, title: e.target.value})}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-text-secondary mb-2">Graad</label>
+                        <select
+                          className="input-field"
+                          value={editForm.grade_level}
+                          onChange={(e) => setEditForm({...editForm, grade_level: parseInt(e.target.value)})}
+                        >
+                          {[1,2,3,4,5,6,7,8,9].map(g => <option key={g} value={g}>Graad {g}</option>)}
+                        </select>
                       </div>
-                    )}
+                      <div>
+                        <label className="block text-sm font-semibold text-text-secondary mb-2">Tipe</label>
+                        <select
+                          className="input-field"
+                          value={editForm.text_type}
+                          onChange={(e) => setEditForm({...editForm, text_type: e.target.value})}
+                        >
+                          <option value="comprehension">Begripstoets</option>
+                          <option value="reading">Hardoplees</option>
+                          <option value="spelling">Spelling</option>
+                          <option value="listening">Luistertoets</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-text-secondary mb-2">Inhoud</label>
+                      <textarea
+                        className="input-field min-h-[150px]"
+                        value={editForm.content}
+                        onChange={(e) => setEditForm({...editForm, content: e.target.value})}
+                      />
+                    </div>
+                    <div className="flex gap-3">
+                      <Button onClick={handleSaveEdit} testId={`save-edit-${text.id}`}>
+                        Stoor Wysigings
+                      </Button>
+                      <Button variant="secondary" onClick={handleCancelEdit} testId={`cancel-edit-${text.id}`}>
+                        Kanselleer
+                      </Button>
+                    </div>
                   </div>
-                  <button 
-                    onClick={() => handleDeleteText(text.id)}
-                    className="p-2 text-accent-500 hover:bg-accent-50 rounded-lg"
-                    data-testid={`delete-text-${text.id}`}
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
+                ) : (
+                  /* View Mode */
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold">{text.title}</h4>
+                        {text.audio_url && <Volume2 className="w-4 h-4 text-primary-500" title="Het oudio" />}
+                      </div>
+                      <p className="text-sm text-text-muted">
+                        Graad {text.grade_level} | {textTypeLabels[text.text_type] || text.text_type} | 
+                        {text.is_ai_generated ? " AI" : " Handmatig"}
+                        {text.questions?.length > 0 && ` | ${text.questions.length} vrae`}
+                      </p>
+                      
+                      <button
+                        onClick={() => setExpandedText(expandedText === text.id ? null : text.id)}
+                        className="text-sm text-primary-500 mt-1 flex items-center gap-1"
+                      >
+                        {expandedText === text.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        {expandedText === text.id ? "Versteek" : "Wys meer"}
+                      </button>
+                      
+                      {expandedText === text.id && (
+                        <div className="mt-3 bg-slate-50 rounded-lg p-3">
+                          <p className="text-sm whitespace-pre-wrap">{text.content}</p>
+                          
+                          {text.questions?.length > 0 && (
+                            <div className="mt-3 border-t pt-3">
+                              <p className="text-sm font-semibold mb-2">Vrae:</p>
+                              {text.questions.map((q, i) => (
+                                <div key={q.id || i} className="text-sm mb-2">
+                                  <span className="font-medium">{i + 1}. {q.question_text}</span>
+                                  <span className="text-text-muted ml-2">(Antw: {q.correct_answer})</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Audio Upload & Recording for Listening/Spelling */}
+                          {(text.text_type === "listening" || text.text_type === "spelling") && (
+                            <div className="mt-3 border-t pt-3">
+                              <p className="text-sm font-semibold mb-2">Oudio Opname:</p>
+                              {text.audio_url ? (
+                                <audio controls src={`${BACKEND_URL}${text.audio_url}`} className="w-full" />
+                              ) : (
+                                <p className="text-sm text-text-muted">Geen oudio opgelaai nie</p>
+                              )}
+                              
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                {/* Upload Audio File */}
+                                <input
+                                  type="file"
+                                  accept="audio/*"
+                                  ref={audioInputRef}
+                                  className="hidden"
+                                  onChange={(e) => e.target.files?.[0] && handleAudioUpload(text.id, e.target.files[0])}
+                                />
+                                <button
+                                  onClick={() => audioInputRef.current?.click()}
+                                  className="flex items-center gap-2 text-sm px-3 py-2 bg-primary-100 text-primary-700 rounded-lg hover:bg-primary-200 transition-colors"
+                                  disabled={uploadingAudio === text.id || isRecording}
+                                  data-testid={`upload-audio-${text.id}`}
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  {uploadingAudio === text.id ? "Laai op..." : "Laai Lêer Op"}
+                                </button>
+                                
+                                {/* Record Audio */}
+                                {isRecording && recordingTextId === text.id ? (
+                                  <button
+                                    onClick={stopRecording}
+                                    className="flex items-center gap-2 text-sm px-3 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 transition-colors animate-pulse"
+                                    data-testid={`stop-recording-${text.id}`}
+                                  >
+                                    <Pause className="w-4 h-4" />
+                                    Stop Opname
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => startRecording(text.id)}
+                                    className="flex items-center gap-2 text-sm px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                                    disabled={isRecording}
+                                    data-testid={`start-recording-${text.id}`}
+                                  >
+                                    <Mic className="w-4 h-4" />
+                                    Neem Op
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => handleStartEdit(text)}
+                        className="p-2 text-primary-500 hover:bg-primary-50 rounded-lg"
+                        data-testid={`edit-text-${text.id}`}
+                        title="Wysig teks"
+                      >
+                        <Edit3 className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteText(text.id)}
+                        className="p-2 text-accent-500 hover:bg-accent-50 rounded-lg"
+                        data-testid={`delete-text-${text.id}`}
+                        title="Verwyder teks"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Card>
             ))
           )}
