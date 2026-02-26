@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Request, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
@@ -15,6 +15,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 import aiofiles
 import tempfile
+import asyncio
+import resend
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.llm.openai import OpenAISpeechToText
 
