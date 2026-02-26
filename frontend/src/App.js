@@ -2075,6 +2075,16 @@ const TextsTab = ({ texts, setTexts }) => {
   const [uploadingAudio, setUploadingAudio] = useState(null);
   const audioInputRef = useRef(null);
   
+  // Edit mode state
+  const [editingText, setEditingText] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  
+  // Audio Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTextId, setRecordingTextId] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  
   // Folder View State
   const [viewMode, setViewMode] = useState("folders"); // "folders" or "list"
   const [expandedGrade, setExpandedGrade] = useState(null);
