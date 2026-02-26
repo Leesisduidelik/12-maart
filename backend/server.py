@@ -1560,16 +1560,20 @@ async def login_parent(parent: ParentLogin):
 
 @api_router.post("/parent/link-learner")
 async def link_learner_to_parent(data: ParentLinkLearner, current_user: dict = Depends(get_current_user)):
-    """Parent links to a learner using the learner's username"""
+    """Parent links to a learner using the learner's full name and surname"""
     # Get parent from token
     parent = await db.parents.find_one({"id": current_user.get("user_id")})
     if not parent:
         raise HTTPException(status_code=404, detail="Ouer nie gevind nie")
     
-    # Find learner by username
-    learner = await db.learners.find_one({"username": data.learner_username}, {"_id": 0, "password_hash": 0})
+    # Find learner by name and surname (case-insensitive)
+    learner = await db.learners.find_one({
+        "name": {"$regex": f"^{data.learner_name}$", "$options": "i"},
+        "surname": {"$regex": f"^{data.learner_surname}$", "$options": "i"}
+    }, {"_id": 0, "password_hash": 0})
+    
     if not learner:
-        raise HTTPException(status_code=404, detail="Leerder nie gevind nie. Kontroleer die gebruikersnaam.")
+        raise HTTPException(status_code=404, detail=f"Leerder '{data.learner_name} {data.learner_surname}' nie gevind nie. Kontroleer die naam en van.")
     
     # Check if already linked
     linked = parent.get("linked_learners", [])
@@ -1595,8 +1599,36 @@ async def link_learner_to_parent(data: ParentLinkLearner, current_user: dict = D
         }}
     )
     
+    # Send email notification if parent has email
+    if parent.get("email") and resend.api_key:
+        try:
+            email_html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #4A90A4;">Lees is Duidelik - Koppeling Suksesvol!</h2>
+                <p>Goeiedag {parent['name']},</p>
+                <p>Jy is suksesvol gekoppel aan <strong>{learner['name']} {learner['surname']}</strong> (Graad {learner['grade']}).</p>
+                <p>Jy kan nou hul vordering sien deur aan te meld by die Ouer Portaal.</p>
+                <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 0;"><strong>Leerder:</strong> {learner['name']} {learner['surname']}</p>
+                    <p style="margin: 5px 0 0 0;"><strong>Graad:</strong> {learner['grade']}</p>
+                </div>
+                <p>Met vriendelike groete,<br/>Lees is Duidelik</p>
+            </div>
+            """
+            await asyncio.to_thread(resend.Emails.send, {
+                "from": SENDER_EMAIL,
+                "to": [parent["email"]],
+                "subject": f"Suksesvol gekoppel aan {learner['name']} {learner['surname']}",
+                "html": email_html
+            })
+            logger.info(f"Email sent to {parent['email']} for linking confirmation")
+        except Exception as e:
+            logger.error(f"Failed to send linking email: {str(e)}")
+            # Don't fail the request if email fails
+    
     return {
         "message": f"Suksesvol gekoppel aan {learner['name']} {learner['surname']}",
+        "email_sent": bool(parent.get("email") and resend.api_key),
         "learner": {
             "id": learner["id"],
             "name": learner["name"],
