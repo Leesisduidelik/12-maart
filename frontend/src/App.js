@@ -3631,6 +3631,7 @@ const AdminDashboard = ({ onLogout }) => {
   const [newSchoolForm, setNewSchoolForm] = useState({ school_name: "", contact_person: "", contact_email: "", contact_whatsapp: "", max_learners: 100 });
   const [siteSettings, setSiteSettings] = useState({ logo_url: null, about_title: "Lees is Duidelik", about_text: "", contact_email: "", contact_phone: "" });
   const [savingSettings, setSavingSettings] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: "", new: "", confirm: "" });
   const [pendingPayments, setPendingPayments] = useState([]);
   const [allPayments, setAllPayments] = useState([]);
   const [bankDetails, setBankDetails] = useState({
