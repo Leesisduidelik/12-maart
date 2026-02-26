@@ -2065,7 +2065,7 @@ async def send_all_weekly_progress(current_user: dict = Depends(get_current_user
             failed_count += 1
     
     return {
-        "message": f"Weeklikse e-posse gestuur",
+        "message": "Weeklikse e-posse gestuur",
         "sent": sent_count,
         "failed": failed_count,
         "total_parents": len(parents)
