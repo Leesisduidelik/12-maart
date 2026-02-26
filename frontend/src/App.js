@@ -1157,6 +1157,27 @@ const ParentDashboard = () => {
             </Button>
           </Card>
 
+          {/* Weekly Email Button */}
+          {parent?.email && parent?.learners?.length > 0 && (
+            <Card testId="weekly-email-card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-heading font-bold">Weeklikse Opsomming</h3>
+                  <p className="text-sm text-text-muted">Ontvang 'n e-pos met jou kind(ers) se vordering</p>
+                </div>
+                <Button 
+                  onClick={sendWeeklyEmail} 
+                  disabled={sendingEmail}
+                  variant="secondary"
+                  testId="send-weekly-email-btn"
+                >
+                  <Mail className="w-4 h-4 mr-2" />
+                  {sendingEmail ? "Stuur..." : "Stuur E-pos"}
+                </Button>
+              </div>
+            </Card>
+          )}
+
           {/* Linked Learners */}
           {parent?.learners?.length > 0 ? (
             <>
