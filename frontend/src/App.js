@@ -10,7 +10,8 @@ import {
   Play, Pause, Check, X, Timer, Star, TrendingUp, Volume2,
   CreditCard, Menu, ArrowLeft, Eye, EyeOff, Building2, Copy, Phone, Mail,
   MessageSquare, Send, Bell, ChevronDown, ChevronUp, ClipboardCopy, Loader,
-  Folder, FolderOpen, RefreshCw, Calendar, FileBarChart, DollarSign, Package
+  Folder, FolderOpen, RefreshCw, Calendar, FileBarChart, DollarSign, Package,
+  Download, Image
 } from "lucide-react";
 import "@/index.css";
 
@@ -1750,6 +1751,16 @@ const ExercisePage = ({ user }) => {
               {/* Content Display - HIDE for listening and spelling tests */}
               {exerciseType !== "listening" && exerciseType !== "spelling" && (
                 <div className="bg-slate-50 rounded-2xl p-6 mb-6">
+                  {/* Show image for Grade 1-3 if available */}
+                  {currentExercise?.image_url && (
+                    <div className="mb-4 text-center">
+                      <img 
+                        src={`${BACKEND_URL}${currentExercise.image_url}`} 
+                        alt={currentExercise.title} 
+                        className="max-w-full md:max-w-md mx-auto rounded-xl shadow-md"
+                      />
+                    </div>
+                  )}
                   <p className="text-lg leading-relaxed whitespace-pre-wrap">{currentExercise?.content}</p>
                 </div>
               )}
@@ -2439,7 +2450,7 @@ const SubscriptionPage = ({ user }) => {
 // Texts Tab Component with questions, audio support, and folder view
 const TextsTab = ({ texts, setTexts }) => {
   const [newText, setNewText] = useState({ 
-    title: "", content: "", grade_level: 1, text_type: "comprehension", questions: [] 
+    title: "", content: "", grade_level: 1, text_type: "comprehension", term: 1, questions: [] 
   });
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState({
@@ -2447,7 +2458,11 @@ const TextsTab = ({ texts, setTexts }) => {
   });
   const [expandedText, setExpandedText] = useState(null);
   const [uploadingAudio, setUploadingAudio] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(null);
+  const [uploadingExcel, setUploadingExcel] = useState(false);
   const audioInputRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const excelInputRef = useRef(null);
   
   // Edit mode state
   const [editingText, setEditingText] = useState(null);
@@ -2552,7 +2567,7 @@ const TextsTab = ({ texts, setTexts }) => {
       toast.success("Teks geskep!");
       const res = await api.get("/texts");
       setTexts(res.data);
-      setNewText({ title: "", content: "", grade_level: 1, text_type: "comprehension", questions: [] });
+      setNewText({ title: "", content: "", grade_level: 1, text_type: "comprehension", term: 1, questions: [] });
     } catch (err) {
       toast.error("Kon nie teks skep nie");
     }
@@ -2585,6 +2600,64 @@ const TextsTab = ({ texts, setTexts }) => {
       toast.error("Kon nie oudio oplaai nie");
     }
     setUploadingAudio(null);
+  };
+
+  // Image upload for texts
+  const handleImageUpload = async (textId, file) => {
+    setUploadingImage(textId);
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    try {
+      await api.post(`/texts/${textId}/image`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      toast.success("Prent opgelaai!");
+      const res = await api.get("/texts");
+      setTexts(res.data);
+    } catch (err) {
+      toast.error("Kon nie prent oplaai nie");
+    }
+    setUploadingImage(null);
+  };
+
+  // Excel bulk upload
+  const handleExcelUpload = async (file) => {
+    setUploadingExcel(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    try {
+      const res = await api.post("/texts/upload/excel", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      toast.success(res.data.message);
+      if (res.data.errors && res.data.errors.length > 0) {
+        toast.error(`${res.data.errors.length} foute gevind`);
+      }
+      const textsRes = await api.get("/texts");
+      setTexts(textsRes.data);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Kon nie Excel lêer verwerk nie");
+    }
+    setUploadingExcel(false);
+  };
+
+  // Download Excel template
+  const downloadTemplate = async () => {
+    try {
+      const res = await api.get("/texts/template/excel", { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'tekste_template.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success("Template afgelaai!");
+    } catch (err) {
+      toast.error("Kon nie template aflaai nie");
+    }
   };
 
   // Start editing a text
@@ -2703,8 +2776,39 @@ const TextsTab = ({ texts, setTexts }) => {
       </div>
       <p className="text-xs text-text-muted mt-1 ml-6">
         {text.is_ai_generated ? "AI" : "Handmatig"}
+        {text.term && ` | Term ${text.term}`}
         {text.questions?.length > 0 && ` | ${text.questions.length} vrae`}
+        {text.image_url && " | 🖼️ Prent"}
       </p>
+      
+      {/* Image Upload for Grade 1-3 */}
+      {text.grade_level <= 3 && (
+        <div className="mt-2 ml-6">
+          {text.image_url ? (
+            <div className="mb-2">
+              <img src={`${BACKEND_URL}${text.image_url}`} alt={text.title} className="max-w-[150px] h-auto rounded border" />
+            </div>
+          ) : (
+            <p className="text-xs text-blue-600 mb-2">💡 Graad 1-3: Voeg 'n prent by</p>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            id={`image-upload-folder-${text.id}`}
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && handleImageUpload(text.id, e.target.files[0])}
+          />
+          <button
+            onClick={() => document.getElementById(`image-upload-folder-${text.id}`)?.click()}
+            className="flex items-center gap-1 text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+            disabled={uploadingImage === text.id}
+            data-testid={`upload-image-folder-${text.id}`}
+          >
+            <Image className="w-3 h-3" />
+            {uploadingImage === text.id ? "Laai..." : text.image_url ? "Vervang Prent" : "Laai Prent Op"}
+          </button>
+        </div>
+      )}
       
       {/* Audio Upload/Record for Listening & Spelling */}
       {(text.text_type === "listening" || text.text_type === "spelling") && (
@@ -2798,6 +2902,21 @@ const TextsTab = ({ texts, setTexts }) => {
                 <option value="listening">Luistertoets</option>
               </select>
             </div>
+          </div>
+          {/* Term Selector */}
+          <div>
+            <label className="block text-sm font-semibold text-text-secondary mb-2">Term</label>
+            <select
+              className="input-field"
+              value={newText.term}
+              onChange={(e) => setNewText({...newText, term: parseInt(e.target.value)})}
+              data-testid="text-term-select"
+            >
+              <option value={1}>Term 1</option>
+              <option value={2}>Term 2</option>
+              <option value={3}>Term 3</option>
+              <option value={4}>Term 4</option>
+            </select>
           </div>
         </div>
         <div className="mt-4">
@@ -2962,6 +3081,38 @@ const TextsTab = ({ texts, setTexts }) => {
         <Button onClick={handleCreateText} className="mt-4 w-full" testId="save-text-btn">
           Stoor Teks
         </Button>
+      </Card>
+
+      {/* Bulk Upload Section */}
+      <Card testId="bulk-upload-section" className="bg-gradient-to-r from-primary-50 to-secondary-50">
+        <h3 className="font-heading font-bold mb-4">📥 Bulk Upload van Excel</h3>
+        <p className="text-sm text-text-secondary mb-4">
+          Laai verskeie tekste op een slag op vanaf 'n Excel lêer. Laai eers die template af om die korrekte formaat te sien.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={downloadTemplate} variant="secondary" testId="download-template-btn">
+            <Download className="w-4 h-4 mr-2" />
+            Laai Template Af
+          </Button>
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            ref={excelInputRef}
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && handleExcelUpload(e.target.files[0])}
+          />
+          <Button 
+            onClick={() => excelInputRef.current?.click()} 
+            disabled={uploadingExcel}
+            testId="upload-excel-btn"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            {uploadingExcel ? "Laai op..." : "Laai Excel Op"}
+          </Button>
+        </div>
+        <div className="mt-4 text-xs text-text-muted">
+          <strong>Kolomme:</strong> titel, tipe, graad, term, inhoud, vraag1, antwoord1, sleutelwoorde1, vraag2, ...
+        </div>
       </Card>
 
       {/* Quick Audio Upload Section - Shows texts that need audio */}

@@ -128,8 +128,10 @@ class TextCreate(BaseModel):
     content: str
     grade_level: int = Field(ge=1, le=9)
     text_type: str  # comprehension, reading, spelling, listening
+    term: int = Field(default=1, ge=1, le=4)  # Term 1-4
     questions: Optional[List[Dict[str, Any]]] = None  # List of questions with answers
     audio_url: Optional[str] = None  # URL for admin-recorded audio (listening/spelling)
+    image_url: Optional[str] = None  # URL for image (especially for Grade 1-3)
 
 class QuestionCreate(BaseModel):
     question_text: str
@@ -539,6 +541,7 @@ async def create_text(text: TextCreate, current_user: dict = Depends(get_current
                 "question_type": q.get("question_type", "typed"),  # multiple_choice or typed
                 "options": q.get("options", []),
                 "correct_answer": q.get("correct_answer", ""),
+                "keywords": q.get("keywords", []),  # Admin-defined keywords for answer matching
                 "points": q.get("points", 10),
                 "order": i + 1
             })
@@ -549,8 +552,10 @@ async def create_text(text: TextCreate, current_user: dict = Depends(get_current
         "content": text.content,
         "grade_level": text.grade_level,
         "text_type": text.text_type,
+        "term": text.term,  # Term 1-4
         "questions": processed_questions,
         "audio_url": text.audio_url,
+        "image_url": text.image_url,  # Image for Grade 1-3
         "is_ai_generated": False,
         "created_at": now
     }
@@ -695,6 +700,193 @@ async def update_text(text_id: str, text_update: TextUpdate, current_user: dict 
     # Return updated text
     updated_text = await db.texts.find_one({"id": text_id}, {"_id": 0})
     return {"message": "Teks suksesvol opgedateer", "text": updated_text}
+
+# Image Upload for Text
+@api_router.post("/texts/{text_id}/image")
+async def upload_text_image(text_id: str, file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Upload an image for a text (especially for Grade 1-3)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    # Check file type
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Slegs JPG, PNG, GIF of WebP beelde toegelaat")
+    
+    # Save file
+    upload_dir = Path("/app/uploads/images")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_ext = file.filename.split('.')[-1] if file.filename else 'jpg'
+    filename = f"{text_id}_{uuid.uuid4()}.{file_ext}"
+    file_path = upload_dir / filename
+    
+    async with aiofiles.open(file_path, 'wb') as out_file:
+        content = await file.read()
+        await out_file.write(content)
+    
+    # Update text with image URL
+    image_url = f"/api/uploads/images/{filename}"
+    await db.texts.update_one(
+        {"id": text_id},
+        {"$set": {"image_url": image_url, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"message": "Prent opgelaai!", "image_url": image_url}
+
+# Serve uploaded images
+@api_router.get("/uploads/images/{filename}")
+async def get_uploaded_image(filename: str):
+    file_path = Path(f"/app/uploads/images/{filename}")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Lêer nie gevind nie")
+    return FileResponse(file_path)
+
+# Excel Bulk Upload
+@api_router.post("/texts/upload/excel")
+async def upload_texts_excel(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Upload texts from Excel file"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    import pandas as pd
+    from io import BytesIO
+    
+    # Check file type
+    if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(status_code=400, detail="Slegs Excel (.xlsx, .xls) of CSV lêers toegelaat")
+    
+    try:
+        content = await file.read()
+        
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(BytesIO(content))
+        else:
+            df = pd.read_excel(BytesIO(content))
+        
+        # Expected columns: titel, tipe, graad, term, inhoud, vraag1, antwoord1, sleutelwoorde1, vraag2, antwoord2, sleutelwoorde2, ...
+        required_cols = ['titel', 'tipe', 'graad', 'inhoud']
+        for col in required_cols:
+            if col not in df.columns:
+                raise HTTPException(status_code=400, detail=f"Kolom '{col}' ontbreek. Benodig: {required_cols}")
+        
+        texts_created = 0
+        errors = []
+        
+        for idx, row in df.iterrows():
+            try:
+                text_id = str(uuid.uuid4())
+                now = datetime.now(timezone.utc).isoformat()
+                
+                # Parse questions from columns
+                questions = []
+                q_num = 1
+                while f'vraag{q_num}' in df.columns and pd.notna(row.get(f'vraag{q_num}')):
+                    question = {
+                        "id": str(uuid.uuid4()),
+                        "question_text": str(row[f'vraag{q_num}']),
+                        "question_type": "typed",
+                        "options": [],
+                        "correct_answer": str(row.get(f'antwoord{q_num}', '')),
+                        "keywords": [],
+                        "points": 10,
+                        "order": q_num
+                    }
+                    # Parse keywords if provided
+                    if f'sleutelwoorde{q_num}' in df.columns and pd.notna(row.get(f'sleutelwoorde{q_num}')):
+                        kw_str = str(row[f'sleutelwoorde{q_num}'])
+                        question["keywords"] = [k.strip() for k in kw_str.split(',') if k.strip()]
+                    
+                    questions.append(question)
+                    q_num += 1
+                
+                # Map type names
+                type_map = {
+                    'begrip': 'comprehension',
+                    'begripstoets': 'comprehension',
+                    'hardoplees': 'reading',
+                    'lees': 'reading',
+                    'spelling': 'spelling',
+                    'speltoets': 'spelling',
+                    'luister': 'listening',
+                    'luistertoets': 'listening'
+                }
+                text_type = type_map.get(str(row['tipe']).lower().strip(), str(row['tipe']).lower().strip())
+                
+                text_doc = {
+                    "id": text_id,
+                    "title": str(row['titel']),
+                    "content": str(row['inhoud']),
+                    "grade_level": int(row['graad']),
+                    "text_type": text_type,
+                    "term": int(row.get('term', 1)) if pd.notna(row.get('term')) else 1,
+                    "questions": questions,
+                    "audio_url": None,
+                    "image_url": None,
+                    "is_ai_generated": False,
+                    "created_at": now
+                }
+                
+                await db.texts.insert_one(text_doc)
+                texts_created += 1
+                
+            except Exception as e:
+                errors.append(f"Ry {idx + 2}: {str(e)}")
+        
+        return {
+            "message": f"{texts_created} tekste suksesvol geskep",
+            "created": texts_created,
+            "errors": errors[:10] if errors else None  # Return first 10 errors
+        }
+        
+    except Exception as e:
+        logger.error(f"Excel upload error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Kon nie lêer verwerk nie: {str(e)}")
+
+# Download Excel Template
+@api_router.get("/texts/template/excel")
+async def download_excel_template(current_user: dict = Depends(get_current_user)):
+    """Download Excel template for bulk text upload"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    import pandas as pd
+    from io import BytesIO
+    
+    # Create sample data
+    sample_data = {
+        'titel': ['Die Hond', 'My Kat', 'Die Son'],
+        'tipe': ['begrip', 'spelling', 'luister'],
+        'graad': [1, 2, 3],
+        'term': [1, 1, 2],
+        'inhoud': [
+            'Die hond hardloop in die tuin. Hy is baie gelukkig.',
+            'kat, hond, huis, boom, son',
+            'Luister na die storie en beantwoord die vrae.'
+        ],
+        'vraag1': ['Waar hardloop die hond?', 'Skryf: kat', 'Wat het jy gehoor?'],
+        'antwoord1': ['in die tuin', 'kat', 'die storie'],
+        'sleutelwoorde1': ['tuin', '', 'storie'],
+        'vraag2': ['Hoe voel die hond?', '', ''],
+        'antwoord2': ['gelukkig', '', ''],
+        'sleutelwoorde2': ['gelukkig, bly', '', '']
+    }
+    
+    df = pd.DataFrame(sample_data)
+    
+    # Write to Excel
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Tekste')
+    
+    output.seek(0)
+    
+    return FileResponse(
+        output,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        filename='tekste_template.xlsx',
+        headers={"Content-Disposition": "attachment; filename=tekste_template.xlsx"}
+    )
 
 # Export/Import Texts for Data Backup
 @api_router.get("/texts/export/all")
