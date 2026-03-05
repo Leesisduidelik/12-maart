@@ -551,7 +551,8 @@ const RegisterPage = ({ onRegister }) => {
   const [registrationType, setRegistrationType] = useState("learner"); // "learner" or "school"
   const [form, setForm] = useState({
     name: "", surname: "", grade: 1, username: "", password: "", whatsapp: "", parent_permission: false, invitation_code: "",
-    parent_email: "", parent_whatsapp: ""
+    parent_email: "", parent_whatsapp: "",
+    request_tutoring: false, tutoring_days: [], tutoring_times: []
   });
   const [schoolForm, setSchoolForm] = useState({
     school_name: "",
@@ -566,6 +567,27 @@ const RegisterPage = ({ onRegister }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [schoolSubmitted, setSchoolSubmitted] = useState(false);
+
+  const availableDays = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrydag", "Saterdag"];
+  const availableTimes = ["08:00-09:00", "09:00-10:00", "10:00-11:00", "14:00-15:00", "15:00-16:00", "16:00-17:00", "17:00-18:00"];
+
+  const toggleDay = (day) => {
+    setForm(prev => ({
+      ...prev,
+      tutoring_days: prev.tutoring_days.includes(day) 
+        ? prev.tutoring_days.filter(d => d !== day)
+        : [...prev.tutoring_days, day]
+    }));
+  };
+
+  const toggleTime = (time) => {
+    setForm(prev => ({
+      ...prev,
+      tutoring_times: prev.tutoring_times.includes(time)
+        ? prev.tutoring_times.filter(t => t !== time)
+        : [...prev.tutoring_times, time]
+    }));
+  };
 
   // Check for invitation code in URL
   useEffect(() => {
@@ -763,6 +785,66 @@ const RegisterPage = ({ onRegister }) => {
                   Ek bevestig dat ek ouer/voog toestemming het om hierdie kind te registreer.
                 </span>
               </label>
+
+              {/* Online Tutoring Option */}
+              <div className="border rounded-xl p-4 mb-4 bg-secondary-50">
+                <label className="flex items-start gap-3 mb-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.request_tutoring}
+                    onChange={(e) => setForm({...form, request_tutoring: e.target.checked})}
+                    className="mt-1 w-5 h-5 rounded border-slate-300"
+                    data-testid="tutoring-checkbox"
+                  />
+                  <div>
+                    <span className="font-semibold text-secondary-700">Online Tutoring Aanvraag (R150/maand)</span>
+                    <p className="text-xs text-text-muted mt-1">Een-op-een online sessies met 'n onderwyser</p>
+                  </div>
+                </label>
+                
+                {form.request_tutoring && (
+                  <div className="mt-3 space-y-3 border-t pt-3">
+                    <div>
+                      <p className="text-sm font-semibold mb-2">Voorkeur Dae:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {availableDays.map(day => (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => toggleDay(day)}
+                            className={`px-3 py-1 rounded-full text-sm ${
+                              form.tutoring_days.includes(day) 
+                                ? 'bg-secondary-500 text-white' 
+                                : 'bg-white border text-text-secondary hover:border-secondary-500'
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold mb-2">Voorkeur Tye:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {availableTimes.map(time => (
+                          <button
+                            key={time}
+                            type="button"
+                            onClick={() => toggleTime(time)}
+                            className={`px-3 py-1 rounded-full text-sm ${
+                              form.tutoring_times.includes(time)
+                                ? 'bg-secondary-500 text-white'
+                                : 'bg-white border text-text-secondary hover:border-secondary-500'
+                            }`}
+                          >
+                            {time}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               
               {error && <p className="text-accent-500 text-sm mb-4">{error}</p>}
               
@@ -1486,6 +1568,7 @@ const ExercisePage = ({ user }) => {
   const [attemptNumber, setAttemptNumber] = useState(1);
   const [lastSubmissionResult, setLastSubmissionResult] = useState(null);
   const [showCorrectAnswers, setShowCorrectAnswers] = useState(false);
+  const [instructions, setInstructions] = useState({});
   
   const exerciseType = window.location.pathname.split("/").pop();
   const typeLabels = {
@@ -1496,6 +1579,11 @@ const ExercisePage = ({ user }) => {
   };
 
   useEffect(() => {
+    // Load exercise instructions
+    api.get("/exercise-instructions")
+      .then(res => setInstructions(res.data))
+      .catch(() => {});
+    
     api.get(`/exercises/${exerciseType}`)
       .then(res => {
         setExercises(res.data.exercises || []);
@@ -1507,6 +1595,9 @@ const ExercisePage = ({ user }) => {
         if (err.response?.status === 402) {
           toast.error("Subskripsie vereis");
           navigate("/subscription");
+        } else if (err.response?.status === 403) {
+          toast.error(err.response?.data?.detail || "Toegang geweier");
+          navigate("/dashboard");
         }
       })
       .finally(() => setLoading(false));
@@ -1646,6 +1737,15 @@ const ExercisePage = ({ user }) => {
           ) : (
             <Card testId="exercise-content">
               <h2 className="font-heading text-lg font-bold mb-4">{currentExercise?.title}</h2>
+              
+              {/* Instructions from Admin */}
+              {instructions[exerciseType] && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+                  <p className="text-sm text-blue-800">
+                    <strong>📋 Instruksies:</strong> {instructions[exerciseType]}
+                  </p>
+                </div>
+              )}
               
               {/* Content Display - HIDE for listening and spelling tests */}
               {exerciseType !== "listening" && exerciseType !== "spelling" && (
@@ -3277,6 +3377,26 @@ const LearnersTab = ({ learners, setLearners }) => {
     setGeneratedMessage(null);
   };
 
+  // Suspend/Unsuspend learner
+  const toggleSuspension = async (learnerId, currentlySuspended) => {
+    try {
+      await api.post("/admin/learner/suspend", {
+        learner_id: learnerId,
+        suspended: !currentlySuspended,
+        reason: currentlySuspended ? null : "Betaling uitstaande"
+      });
+      toast.success(currentlySuspended ? "Leerder geaktiveer" : "Leerder gesuspendeer");
+      // Refresh learner data
+      const res = await api.get("/progress/all");
+      setLearners(res.data);
+      if (learnerDetail) {
+        loadLearnerDetail(learnerId);
+      }
+    } catch (err) {
+      toast.error("Kon nie status verander nie");
+    }
+  };
+
   const generateNotification = async () => {
     try {
       const res = await api.post("/notifications/generate", {
@@ -3622,11 +3742,16 @@ Lees is Duidelik`;
             key={l.learner.id} 
             testId={`learner-${l.learner.id}`}
             onClick={() => handleSelectLearner(l)}
-            className="cursor-pointer hover:border-primary-500"
+            className={`cursor-pointer hover:border-primary-500 ${l.learner.suspended ? 'border-red-300 bg-red-50' : ''}`}
           >
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold">{l.learner.name} {l.learner.surname}</h3>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold">{l.learner.name} {l.learner.surname}</h3>
+                  {l.learner.suspended && (
+                    <span className="px-2 py-0.5 text-xs bg-red-200 text-red-800 rounded-full">Gesuspendeer</span>
+                  )}
+                </div>
                 <p className="text-sm text-text-muted">
                   Graad {l.learner.current_reading_level || l.learner.grade} | 
                   {l.exercises_completed} oefeninge | 
@@ -3635,6 +3760,21 @@ Lees is Duidelik`;
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {/* Suspend/Activate Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSuspension(l.learner.id, l.learner.suspended);
+                  }}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium ${
+                    l.learner.suspended 
+                      ? "bg-green-100 text-green-700 hover:bg-green-200" 
+                      : "bg-red-100 text-red-700 hover:bg-red-200"
+                  }`}
+                  data-testid={`toggle-suspend-${l.learner.id}`}
+                >
+                  {l.learner.suspended ? "Aktiveer" : "Suspend"}
+                </button>
                 <div className={`px-3 py-1 rounded-full text-sm font-medium ${
                   l.subscription?.active 
                     ? "bg-primary-100 text-primary-700" 
@@ -3676,6 +3816,13 @@ const AdminDashboard = ({ onLogout }) => {
   const [passwordForm, setPasswordForm] = useState({ current: "", new: "", confirm: "" });
   const [pendingPayments, setPendingPayments] = useState([]);
   const [allPayments, setAllPayments] = useState([]);
+  const [tutoringRequests, setTutoringRequests] = useState([]);
+  const [exerciseInstructions, setExerciseInstructions] = useState({
+    comprehension: "Lees die teks aandagtig deur en beantwoord dan die vrae.",
+    reading: "Lees die teks hardop so duidelik en akkuraat as moontlik.",
+    spelling: "Luister na elke woord en skryf dit korrek.",
+    listening: "Luister aandagtig na die oudio en beantwoord die vrae."
+  });
   const [bankDetails, setBankDetails] = useState({
     bank_name: "FNB (First National Bank)",
     account_holder: "Lees is Duidelik",
@@ -3696,9 +3843,11 @@ const AdminDashboard = ({ onLogout }) => {
       api.get("/settings").catch(() => ({ data: {} })),
       api.get("/payments/eft/pending").catch(() => ({ data: { payments: [] } })),
       api.get("/payments/eft/all").catch(() => ({ data: { payments: [] } })),
-      api.get("/payments/bank-details").catch(() => ({ data: bankDetails }))
+      api.get("/payments/bank-details").catch(() => ({ data: bankDetails })),
+      api.get("/admin/tutoring/requests").catch(() => ({ data: { requests: [] } })),
+      api.get("/exercise-instructions").catch(() => ({ data: exerciseInstructions }))
     ])
-    .then(([learnersRes, textsRes, invitesRes, schoolsRes, schoolCodesRes, settingsRes, pendingRes, allPaymentsRes, bankRes]) => {
+    .then(([learnersRes, textsRes, invitesRes, schoolsRes, schoolCodesRes, settingsRes, pendingRes, allPaymentsRes, bankRes, tutoringRes, instructionsRes]) => {
       setLearners(learnersRes.data);
       setTexts(textsRes.data);
       setInvitations(invitesRes.data);
@@ -3708,6 +3857,8 @@ const AdminDashboard = ({ onLogout }) => {
       setPendingPayments(pendingRes.data.payments || []);
       setAllPayments(allPaymentsRes.data.payments || []);
       if (bankRes.data) setBankDetails(prev => ({ ...prev, ...bankRes.data }));
+      setTutoringRequests(tutoringRes.data.requests || []);
+      if (instructionsRes.data) setExerciseInstructions(prev => ({ ...prev, ...instructionsRes.data }));
     })
     .catch(err => {
       console.error("Error loading admin data:", err);
@@ -3835,6 +3986,7 @@ const AdminDashboard = ({ onLogout }) => {
                 { id: "schools", icon: Building2, label: "Skole" },
                 { id: "invitations", icon: User, label: "Uitnodigings" },
                 { id: "learners", icon: Users, label: "Leerders" },
+                { id: "tutoring", icon: Phone, label: "Tutoring" },
                 { id: "texts", icon: FileText, label: "Tekste" },
                 { id: "generate", icon: Star, label: "Genereer" },
                 { id: "settings", icon: Settings, label: "Instellings" },
@@ -4617,6 +4769,91 @@ const AdminDashboard = ({ onLogout }) => {
             <LearnersTab learners={learners} setLearners={setLearners} />
           )}
 
+          {/* Tutoring Requests Tab */}
+          {activeTab === "tutoring" && (
+            <div className="space-y-6">
+              <Card testId="tutoring-requests">
+                <h3 className="font-heading font-bold mb-4">Online Tutoring Aanvrae (R150pm)</h3>
+                {tutoringRequests.length === 0 ? (
+                  <p className="text-text-muted">Geen aanvrae nog ontvang nie</p>
+                ) : (
+                  <div className="space-y-4">
+                    {tutoringRequests.map(req => (
+                      <div key={req.id} className={`p-4 rounded-xl border ${
+                        req.status === 'pending' ? 'border-yellow-300 bg-yellow-50' :
+                        req.status === 'contacted' ? 'border-blue-300 bg-blue-50' :
+                        req.status === 'confirmed' ? 'border-green-300 bg-green-50' :
+                        'border-gray-300 bg-gray-50'
+                      }`}>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-semibold">{req.requester_name}</h4>
+                            <p className="text-sm text-text-muted">{req.requester_type === 'learner' ? 'Leerder' : req.requester_type === 'parent' ? 'Ouer' : 'Skool'}</p>
+                          </div>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            req.status === 'pending' ? 'bg-yellow-200 text-yellow-800' :
+                            req.status === 'contacted' ? 'bg-blue-200 text-blue-800' :
+                            req.status === 'confirmed' ? 'bg-green-200 text-green-800' :
+                            'bg-gray-200 text-gray-800'
+                          }`}>
+                            {req.status === 'pending' ? 'Wag' : req.status === 'contacted' ? 'Gekontak' : req.status === 'confirmed' ? 'Bevestig' : 'Gekanselleer'}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-text-muted">WhatsApp:</span>
+                            <a href={`https://wa.me/${req.whatsapp?.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="ml-2 text-green-600 hover:underline">
+                              {req.whatsapp}
+                            </a>
+                          </div>
+                          <div>
+                            <span className="text-text-muted">Dae:</span> {req.preferred_days?.join(', ') || '-'}
+                          </div>
+                          <div>
+                            <span className="text-text-muted">Tye:</span> {req.preferred_times?.join(', ') || '-'}
+                          </div>
+                          <div>
+                            <span className="text-text-muted">Datum:</span> {new Date(req.created_at).toLocaleDateString('af-ZA')}
+                          </div>
+                        </div>
+                        {req.notes && <p className="mt-2 text-sm italic">"{req.notes}"</p>}
+                        <div className="mt-3 flex gap-2">
+                          <select 
+                            className="input-field text-sm py-1"
+                            value={req.status}
+                            onChange={async (e) => {
+                              try {
+                                await api.put(`/admin/tutoring/request/${req.id}?status=${e.target.value}`);
+                                const res = await api.get("/admin/tutoring/requests");
+                                setTutoringRequests(res.data.requests || []);
+                                toast.success("Status opgedateer");
+                              } catch (err) {
+                                toast.error("Kon nie opdateer nie");
+                              }
+                            }}
+                          >
+                            <option value="pending">Wag</option>
+                            <option value="contacted">Gekontak</option>
+                            <option value="confirmed">Bevestig</option>
+                            <option value="cancelled">Gekanselleer</option>
+                          </select>
+                          <a 
+                            href={`https://wa.me/${req.whatsapp?.replace(/\D/g, '')}?text=Hallo ${req.requester_name}, dankie vir jou aanvraag vir online tutoring by Lees is Duidelik!`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded-lg text-sm hover:bg-green-600"
+                          >
+                            <Phone className="w-4 h-4" /> WhatsApp
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
+
           {/* Texts Tab */}
           {activeTab === "texts" && (
             <TextsTab texts={texts} setTexts={setTexts} />
@@ -4763,6 +5000,70 @@ const AdminDashboard = ({ onLogout }) => {
               >
                 {savingSettings ? "Stoor..." : "Stoor Instellings"}
               </Button>
+
+              {/* Exercise Instructions */}
+              <Card className="mt-6" testId="exercise-instructions-card">
+                <h3 className="font-heading font-bold mb-4">📋 Oefening Instruksies</h3>
+                <p className="text-text-secondary text-sm mb-4">
+                  Skryf instruksies wat leerders sal sien voordat hulle elke tipe oefening begin.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Begripstoets Instruksies</label>
+                    <textarea
+                      className="input-field min-h-[80px]"
+                      value={exerciseInstructions.comprehension || ""}
+                      onChange={(e) => setExerciseInstructions({...exerciseInstructions, comprehension: e.target.value})}
+                      placeholder="Lees die teks aandagtig deur en beantwoord dan die vrae."
+                      data-testid="instruction-comprehension"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Hardoplees Instruksies</label>
+                    <textarea
+                      className="input-field min-h-[80px]"
+                      value={exerciseInstructions.reading || ""}
+                      onChange={(e) => setExerciseInstructions({...exerciseInstructions, reading: e.target.value})}
+                      placeholder="Lees die teks hardop so duidelik en akkuraat as moontlik."
+                      data-testid="instruction-reading"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Speltoets Instruksies</label>
+                    <textarea
+                      className="input-field min-h-[80px]"
+                      value={exerciseInstructions.spelling || ""}
+                      onChange={(e) => setExerciseInstructions({...exerciseInstructions, spelling: e.target.value})}
+                      placeholder="Luister na elke woord en skryf dit korrek."
+                      data-testid="instruction-spelling"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Luistertoets Instruksies</label>
+                    <textarea
+                      className="input-field min-h-[80px]"
+                      value={exerciseInstructions.listening || ""}
+                      onChange={(e) => setExerciseInstructions({...exerciseInstructions, listening: e.target.value})}
+                      placeholder="Luister aandagtig na die oudio en beantwoord die vrae."
+                      data-testid="instruction-listening"
+                    />
+                  </div>
+                  <Button 
+                    onClick={async () => {
+                      try {
+                        await api.put("/admin/exercise-instructions", exerciseInstructions);
+                        toast.success("Instruksies opgedateer!");
+                      } catch (err) {
+                        toast.error("Kon nie stoor nie");
+                      }
+                    }}
+                    variant="secondary"
+                    testId="save-instructions-btn"
+                  >
+                    Stoor Instruksies
+                  </Button>
+                </div>
+              </Card>
 
               {/* Admin Password Change */}
               <Card className="mt-6" testId="password-change-card">

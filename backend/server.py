@@ -86,6 +86,10 @@ class LearnerCreate(BaseModel):
     invitation_code: str
     parent_email: Optional[str] = None
     parent_whatsapp: Optional[str] = None
+    # Online tutoring request
+    request_tutoring: bool = False
+    tutoring_days: Optional[List[str]] = None  # e.g. ["Maandag", "Woensdag"]
+    tutoring_times: Optional[List[str]] = None  # e.g. ["14:00-15:00", "16:00-17:00"]
 
 class InvitationCodeCreate(BaseModel):
     note: Optional[str] = None
@@ -193,6 +197,30 @@ class EFTPaymentSubmit(BaseModel):
     amount_paid: float
     payment_date: str  # Date they made the payment
     proof_description: Optional[str] = None  # Optional description
+
+# Tutoring Request Model
+class TutoringRequest(BaseModel):
+    learner_id: Optional[str] = None
+    parent_id: Optional[str] = None
+    school_id: Optional[str] = None
+    requester_name: str
+    whatsapp: str
+    preferred_days: List[str]  # e.g. ["Maandag", "Woensdag"]
+    preferred_times: List[str]  # e.g. ["14:00-15:00"]
+    notes: Optional[str] = None
+
+# Exercise Instructions Model
+class ExerciseInstructions(BaseModel):
+    comprehension: Optional[str] = None
+    reading: Optional[str] = None
+    spelling: Optional[str] = None
+    listening: Optional[str] = None
+
+# Learner Suspension Model
+class LearnerSuspend(BaseModel):
+    learner_id: str
+    suspended: bool
+    reason: Optional[str] = None
 
 class BankDetailsUpdate(BaseModel):
     bank_name: str
@@ -448,6 +476,24 @@ async def register_learner(learner: LearnerCreate):
     }
     
     await db.learners.insert_one(learner_doc)
+    
+    # Create tutoring request if requested
+    if learner.request_tutoring and learner.tutoring_days and learner.tutoring_times:
+        tutoring_request = {
+            "id": str(uuid.uuid4()),
+            "requester_type": "learner",
+            "requester_id": learner_id,
+            "learner_id": learner_id,
+            "requester_name": f"{learner.name} {learner.surname}",
+            "whatsapp": learner.whatsapp,
+            "preferred_days": learner.tutoring_days,
+            "preferred_times": learner.tutoring_times,
+            "notes": f"Graad {learner.grade} leerder - aanvraag tydens registrasie",
+            "status": "pending",
+            "created_at": now
+        }
+        await db.tutoring_requests.insert_one(tutoring_request)
+    
     token = create_access_token({"sub": learner_id, "user_type": "learner"})
     return TokenResponse(access_token=token, token_type="bearer", user_type="learner", user_id=learner_id)
 
@@ -1335,13 +1381,18 @@ async def get_exercises(exercise_type: str, current_user: dict = Depends(get_cur
     if current_user["user_type"] != "learner":
         raise HTTPException(status_code=403, detail="Slegs leerders")
     
+    # Check if learner is suspended
+    learner = await db.learners.find_one({"id": current_user["user_id"]}, {"_id": 0})
+    if learner and learner.get("suspended"):
+        reason = learner.get("suspension_reason", "Jou rekening is gesuspendeer")
+        raise HTTPException(status_code=403, detail=f"Rekening gesuspendeer: {reason}. Kontak asseblief die admin.")
+    
     # Check subscription
     subscription = await check_subscription(current_user["user_id"])
     if not subscription["active"]:
         raise HTTPException(status_code=402, detail=subscription.get("reason", "Subskripsie vereis"))
     
-    learner = await db.learners.find_one({"id": current_user["user_id"]}, {"_id": 0})
-    grade_level = learner.get("current_reading_level", 1)
+    grade_level = learner.get("current_reading_level", 1) if learner else 1
     
     texts = await db.texts.find(
         {"grade_level": grade_level, "text_type": exercise_type},
@@ -2188,6 +2239,155 @@ async def send_all_weekly_progress(current_user: dict = Depends(get_current_user
         "failed": failed_count,
         "total_parents": len(parents)
     }
+
+# ============ LEARNER SUSPENSION ============
+@api_router.post("/admin/learner/suspend")
+async def suspend_learner(data: LearnerSuspend, current_user: dict = Depends(get_current_user)):
+    """Suspend or unsuspend a learner account"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    learner = await db.learners.find_one({"id": data.learner_id})
+    if not learner:
+        raise HTTPException(status_code=404, detail="Leerder nie gevind nie")
+    
+    await db.learners.update_one(
+        {"id": data.learner_id},
+        {"$set": {
+            "suspended": data.suspended,
+            "suspension_reason": data.reason or "Betaling uitstaande",
+            "suspended_at": datetime.now(timezone.utc).isoformat() if data.suspended else None,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    action = "gesuspendeer" if data.suspended else "geaktiveer"
+    return {"message": f"Leerder {learner['name']} {learner['surname']} is {action}"}
+
+@api_router.get("/admin/learners/suspended")
+async def get_suspended_learners(current_user: dict = Depends(get_current_user)):
+    """Get list of suspended learners"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    suspended = await db.learners.find(
+        {"suspended": True},
+        {"_id": 0, "password_hash": 0}
+    ).to_list(500)
+    
+    return {"suspended_learners": suspended}
+
+# ============ TUTORING REQUESTS ============
+@api_router.post("/tutoring/request")
+async def create_tutoring_request(request: TutoringRequest, current_user: dict = Depends(get_current_user)):
+    """Create a tutoring request from learner/parent/school"""
+    request_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Determine requester type
+    requester_type = current_user.get("user_type", "unknown")
+    
+    request_doc = {
+        "id": request_id,
+        "requester_type": requester_type,
+        "requester_id": current_user.get("user_id"),
+        "requester_name": request.requester_name,
+        "whatsapp": request.whatsapp,
+        "preferred_days": request.preferred_days,
+        "preferred_times": request.preferred_times,
+        "notes": request.notes,
+        "status": "pending",  # pending, contacted, confirmed, cancelled
+        "created_at": now
+    }
+    
+    # Add learner/parent/school ID if provided
+    if request.learner_id:
+        request_doc["learner_id"] = request.learner_id
+    if request.parent_id:
+        request_doc["parent_id"] = request.parent_id
+    if request.school_id:
+        request_doc["school_id"] = request.school_id
+    
+    await db.tutoring_requests.insert_one(request_doc)
+    
+    return {
+        "message": "Tutoring aanvraag suksesvol ingedien! Ons sal jou kontak.",
+        "request_id": request_id
+    }
+
+@api_router.get("/admin/tutoring/requests")
+async def get_tutoring_requests(current_user: dict = Depends(get_current_user)):
+    """Get all tutoring requests for admin"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    requests = await db.tutoring_requests.find(
+        {},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    
+    return {"requests": requests}
+
+@api_router.put("/admin/tutoring/request/{request_id}")
+async def update_tutoring_request(request_id: str, status: str, current_user: dict = Depends(get_current_user)):
+    """Update tutoring request status"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    valid_statuses = ["pending", "contacted", "confirmed", "cancelled"]
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Ongeldige status. Gebruik: {', '.join(valid_statuses)}")
+    
+    result = await db.tutoring_requests.update_one(
+        {"id": request_id},
+        {"$set": {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Aanvraag nie gevind nie")
+    
+    return {"message": f"Aanvraag status opgedateer na '{status}'"}
+
+# ============ EXERCISE INSTRUCTIONS ============
+@api_router.get("/exercise-instructions")
+async def get_exercise_instructions():
+    """Get exercise instructions for all types"""
+    instructions = await db.settings.find_one({"type": "exercise_instructions"}, {"_id": 0})
+    
+    if not instructions:
+        # Return defaults
+        return {
+            "comprehension": "Lees die teks aandagtig deur en beantwoord dan die vrae.",
+            "reading": "Lees die teks hardop so duidelik en akkuraat as moontlik.",
+            "spelling": "Luister na elke woord en skryf dit korrek.",
+            "listening": "Luister aandagtig na die oudio en beantwoord die vrae."
+        }
+    
+    return instructions.get("instructions", {})
+
+@api_router.put("/admin/exercise-instructions")
+async def update_exercise_instructions(instructions: ExerciseInstructions, current_user: dict = Depends(get_current_user)):
+    """Update exercise instructions (admin only)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    instructions_dict = {
+        "comprehension": instructions.comprehension,
+        "reading": instructions.reading,
+        "spelling": instructions.spelling,
+        "listening": instructions.listening
+    }
+    
+    # Remove None values
+    instructions_dict = {k: v for k, v in instructions_dict.items() if v is not None}
+    
+    await db.settings.update_one(
+        {"type": "exercise_instructions"},
+        {"$set": {"instructions": instructions_dict, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True
+    )
+    
+    return {"message": "Instruksies opgedateer", "instructions": instructions_dict}
 
 # Parent Portal Routes (Legacy - Admin generated links)
 @api_router.post("/parent/generate-link")
