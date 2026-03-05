@@ -2443,7 +2443,7 @@ const TextsTab = ({ texts, setTexts }) => {
   });
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState({
-    question_text: "", question_type: "typed", options: ["", "", "", ""], correct_answer: "", points: 10
+    question_text: "", question_type: "typed", options: ["", "", "", ""], correct_answer: "", points: 10, keywords: ""
   });
   const [expandedText, setExpandedText] = useState(null);
   const [uploadingAudio, setUploadingAudio] = useState(null);
@@ -2511,19 +2511,25 @@ const TextsTab = ({ texts, setTexts }) => {
       toast.error("Vraag en korrekte antwoord is nodig");
       return;
     }
+    // Parse keywords from comma-separated string
+    const keywordsArray = currentQuestion.keywords 
+      ? currentQuestion.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0)
+      : [];
+    
     const questionToAdd = {
       ...currentQuestion,
       id: `q_${Date.now()}`,
       options: currentQuestion.question_type === "multiple_choice" 
         ? currentQuestion.options.filter(o => o.trim()) 
-        : []
+        : [],
+      keywords: keywordsArray
     };
     setNewText({
       ...newText,
       questions: [...newText.questions, questionToAdd]
     });
     setCurrentQuestion({
-      question_text: "", question_type: "typed", options: ["", "", "", ""], correct_answer: "", points: 10
+      question_text: "", question_type: "typed", options: ["", "", "", ""], correct_answer: "", points: 10, keywords: ""
     });
     setShowQuestionForm(false);
     toast.success("Vraag bygevoeg!");
@@ -2882,6 +2888,27 @@ const TextsTab = ({ texts, setTexts }) => {
                 testId="correct-answer-input"
               />
 
+              {/* Keywords for typed answers */}
+              {currentQuestion.question_type === "typed" && (
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <label className="block text-sm font-semibold text-blue-800 mb-2">
+                    🔑 Sleutelwoorde (Opsioneel)
+                  </label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={currentQuestion.keywords}
+                    onChange={(e) => setCurrentQuestion({...currentQuestion, keywords: e.target.value})}
+                    placeholder="bv: hond, blaf, hard (skei met kommas)"
+                    data-testid="keywords-input"
+                  />
+                  <p className="text-xs text-blue-600 mt-2">
+                    As jy sleutelwoorde invoer, sal die antwoord korrek wees as die leerder hierdie woorde gebruik. 
+                    Skei woorde met kommas.
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-2 mt-4">
                 <Button onClick={addQuestion} testId="save-question-btn">Voeg By</Button>
                 <button 
@@ -2904,6 +2931,11 @@ const TextsTab = ({ texts, setTexts }) => {
                     <span className="text-xs ml-2 text-text-muted">
                       ({q.question_type === "multiple_choice" ? "Keuse" : "Tik"} | {q.points} punte)
                     </span>
+                    {q.keywords && q.keywords.length > 0 && (
+                      <div className="text-xs text-blue-600 mt-1">
+                        🔑 Sleutelwoorde: {q.keywords.join(', ')}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => removeQuestion(i)}

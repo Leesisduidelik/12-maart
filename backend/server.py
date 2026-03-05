@@ -1464,11 +1464,21 @@ async def submit_exercise(submission: ExerciseSubmission, current_user: dict = D
                 total_points += points
                 question_type = question.get("question_type", "typed")
                 
+                # Get admin-defined keywords if available
+                admin_keywords = question.get("keywords", [])
+                
                 # For multiple choice - exact match required
                 if question_type == "multiple_choice":
                     is_correct = user_answer.lower() == correct_answer.lower()
+                elif admin_keywords and len(admin_keywords) > 0:
+                    # Use admin-defined keywords - check if user answer contains them
+                    user_answer_lower = user_answer.lower()
+                    matched_keywords = [kw for kw in admin_keywords if kw.lower() in user_answer_lower]
+                    # Must match at least 50% of keywords, or all if only 1-2 keywords
+                    min_matches = max(1, len(admin_keywords) // 2) if len(admin_keywords) > 2 else len(admin_keywords)
+                    is_correct = len(matched_keywords) >= min_matches
                 else:
-                    # For typed answers - use keyword matching
+                    # Fallback - use automatic keyword matching
                     is_correct, match_pct = check_keyword_match(user_answer, correct_answer)
                 
                 if is_correct:
@@ -1479,7 +1489,8 @@ async def submit_exercise(submission: ExerciseSubmission, current_user: dict = D
                     "user_answer": answer.get("answer"),
                     "correct_answer": question.get("correct_answer"),
                     "is_correct": is_correct,
-                    "points_earned": points if is_correct else 0
+                    "points_earned": points if is_correct else 0,
+                    "keywords_used": admin_keywords if admin_keywords else None
                 })
     else:
         # Fallback for old-style submissions
