@@ -852,6 +852,7 @@ async def download_excel_template(current_user: dict = Depends(get_current_user)
     
     import pandas as pd
     from io import BytesIO
+    from starlette.responses import StreamingResponse
     
     # Create sample data
     sample_data = {
@@ -881,10 +882,9 @@ async def download_excel_template(current_user: dict = Depends(get_current_user)
     
     output.seek(0)
     
-    return FileResponse(
+    return StreamingResponse(
         output,
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        filename='tekste_template.xlsx',
         headers={"Content-Disposition": "attachment; filename=tekste_template.xlsx"}
     )
 
