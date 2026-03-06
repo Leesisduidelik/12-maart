@@ -4003,8 +4003,20 @@ const AdminDashboard = ({ onLogout }) => {
   const [exerciseInstructions, setExerciseInstructions] = useState({
     comprehension: "Lees die teks aandagtig deur en beantwoord dan die vrae.",
     reading: "Lees die teks hardop so duidelik en akkuraat as moontlik.",
-    spelling: "Luister na elke woord en skryf dit korrek.",
-    listening: "Luister aandagtig na die oudio en beantwoord die vrae."
+    reading_level_test: `a) Dis belangrik dat jy wel lees sodat ons jou korrekte leesvlak bepaal.
+b) Lees die teks hardop as jy alleen is, maar as jy in 'n klas is lees dit dan stil.
+c) Indien jy nie saamstem met jou eerste probeerslag, doen dit liefs oor.
+Geniet die toets.`,
+    spelling: `a) Volg asseblief die instruksie noukeurig.
+b) Elke woord sal 3 keer gelees word.
+c) Nadat die woord gelees is, tik die woord in die korrekte spasie.
+d) Aan die einde van die toets, sal elke woord 1 keer gelees word sodat jy deur jou antwoorde kan gaan voordat jy dit indien.
+Geniet die toets.`,
+    listening: `a) Luister 3 keer na die voorlesing van die teks.
+b) Maak notas van belangrike inligting tydens die voorlesing.
+c) Antwoord die vrae, slegs nadat jy die voorlesing 3 keer gehoor het.
+d) Dis belangrik om die instruksies te volg, want ons probeer jou Luistervaardighede verbeter.
+Geniet die toets.`
   });
   const [bankDetails, setBankDetails] = useState({
     bank_name: "FNB (First National Bank)",
@@ -5212,9 +5224,19 @@ const AdminDashboard = ({ onLogout }) => {
                     />
                   </div>
                   <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Leesvlaktoets Instruksies</label>
+                    <textarea
+                      className="input-field min-h-[120px]"
+                      value={exerciseInstructions.reading_level_test || ""}
+                      onChange={(e) => setExerciseInstructions({...exerciseInstructions, reading_level_test: e.target.value})}
+                      placeholder="Instruksies vir die leesvlaktoets..."
+                      data-testid="instruction-reading-level"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-sm font-semibold text-text-secondary mb-2">Speltoets Instruksies</label>
                     <textarea
-                      className="input-field min-h-[80px]"
+                      className="input-field min-h-[120px]"
                       value={exerciseInstructions.spelling || ""}
                       onChange={(e) => setExerciseInstructions({...exerciseInstructions, spelling: e.target.value})}
                       placeholder="Luister na elke woord en skryf dit korrek."
@@ -5224,7 +5246,7 @@ const AdminDashboard = ({ onLogout }) => {
                   <div>
                     <label className="block text-sm font-semibold text-text-secondary mb-2">Luistertoets Instruksies</label>
                     <textarea
-                      className="input-field min-h-[80px]"
+                      className="input-field min-h-[120px]"
                       value={exerciseInstructions.listening || ""}
                       onChange={(e) => setExerciseInstructions({...exerciseInstructions, listening: e.target.value})}
                       placeholder="Luister aandagtig na die oudio en beantwoord die vrae."

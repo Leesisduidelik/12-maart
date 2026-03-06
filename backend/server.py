@@ -215,6 +215,7 @@ class TutoringRequest(BaseModel):
 class ExerciseInstructions(BaseModel):
     comprehension: Optional[str] = None
     reading: Optional[str] = None
+    reading_level_test: Optional[str] = None  # Leesvlaktoets
     spelling: Optional[str] = None
     listening: Optional[str] = None
 
@@ -2557,16 +2558,32 @@ async def get_exercise_instructions():
     """Get exercise instructions for all types"""
     instructions = await db.settings.find_one({"type": "exercise_instructions"}, {"_id": 0})
     
-    if not instructions:
-        # Return defaults
-        return {
-            "comprehension": "Lees die teks aandagtig deur en beantwoord dan die vrae.",
-            "reading": "Lees die teks hardop so duidelik en akkuraat as moontlik.",
-            "spelling": "Luister na elke woord en skryf dit korrek.",
-            "listening": "Luister aandagtig na die oudio en beantwoord die vrae."
-        }
+    # Default instructions
+    defaults = {
+        "comprehension": "Lees die teks aandagtig deur en beantwoord dan die vrae.",
+        "reading": "Lees die teks hardop so duidelik en akkuraat as moontlik.",
+        "reading_level_test": """a) Dis belangrik dat jy wel lees sodat ons jou korrekte leesvlak bepaal.
+b) Lees die teks hardop as jy alleen is, maar as jy in 'n klas is lees dit dan stil.
+c) Indien jy nie saamstem met jou eerste probeerslag, doen dit liefs oor.
+Geniet die toets.""",
+        "spelling": """a) Volg asseblief die instruksie noukeurig.
+b) Elke woord sal 3 keer gelees word.
+c) Nadat die woord gelees is, tik die woord in die korrekte spasie.
+d) Aan die einde van die toets, sal elke woord 1 keer gelees word sodat jy deur jou antwoorde kan gaan voordat jy dit indien.
+Geniet die toets.""",
+        "listening": """a) Luister 3 keer na die voorlesing van die teks.
+b) Maak notas van belangrike inligting tydens die voorlesing.
+c) Antwoord die vrae, slegs nadat jy die voorlesing 3 keer gehoor het.
+d) Dis belangrik om die instruksies te volg, want ons probeer jou Luistervaardighede verbeter.
+Geniet die toets."""
+    }
     
-    return instructions.get("instructions", {})
+    if not instructions:
+        return defaults
+    
+    # Merge saved instructions with defaults
+    saved = instructions.get("instructions", {})
+    return {**defaults, **saved}
 
 @api_router.put("/admin/exercise-instructions")
 async def update_exercise_instructions(instructions: ExerciseInstructions, current_user: dict = Depends(get_current_user)):
@@ -2577,6 +2594,7 @@ async def update_exercise_instructions(instructions: ExerciseInstructions, curre
     instructions_dict = {
         "comprehension": instructions.comprehension,
         "reading": instructions.reading,
+        "reading_level_test": instructions.reading_level_test,
         "spelling": instructions.spelling,
         "listening": instructions.listening
     }
