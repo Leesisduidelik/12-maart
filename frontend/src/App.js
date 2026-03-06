@@ -2155,6 +2155,47 @@ const SubscriptionPage = ({ user }) => {
     payment_date: new Date().toISOString().split('T')[0],
     proof_description: ""
   });
+  
+  // Tutoring request state
+  const [requestTutoring, setRequestTutoring] = useState(false);
+  const [tutoringDays, setTutoringDays] = useState([]);
+  const [tutoringTimes, setTutoringTimes] = useState([]);
+  const [submittingTutoring, setSubmittingTutoring] = useState(false);
+  
+  const availableDays = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrydag", "Saterdag"];
+  const availableTimes = ["08:00-09:00", "09:00-10:00", "10:00-11:00", "14:00-15:00", "15:00-16:00", "16:00-17:00", "17:00-18:00"];
+
+  const toggleDay = (day) => {
+    setTutoringDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
+  };
+
+  const toggleTime = (time) => {
+    setTutoringTimes(prev => prev.includes(time) ? prev.filter(t => t !== time) : [...prev, time]);
+  };
+
+  const submitTutoringRequest = async () => {
+    if (tutoringDays.length === 0 || tutoringTimes.length === 0) {
+      toast.error("Kies asseblief voorkeur dae en tye");
+      return;
+    }
+    setSubmittingTutoring(true);
+    try {
+      await api.post("/tutoring/request", {
+        requester_name: user?.name || user?.username || "Leerder",
+        whatsapp: user?.whatsapp || "",
+        preferred_days: tutoringDays,
+        preferred_times: tutoringTimes,
+        notes: "Aanvraag vanaf subskripsie bladsy"
+      });
+      toast.success("Tutoring aanvraag ingedien! Ons sal jou kontak.");
+      setRequestTutoring(false);
+      setTutoringDays([]);
+      setTutoringTimes([]);
+    } catch (err) {
+      toast.error("Kon nie aanvraag indien nie");
+    }
+    setSubmittingTutoring(false);
+  };
 
   useEffect(() => {
     // Fetch subscription status, bank details, and payment history
@@ -2338,6 +2379,84 @@ const SubscriptionPage = ({ user }) => {
                   <div className="text-right">
                     <div className="text-2xl font-bold text-secondary-600">R399</div>
                     <div className="text-sm text-text-muted">eenmalig</div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Online Tutoring Option */}
+              <Card className="border-2 border-green-400 bg-green-50 mt-4" testId="tutoring-option">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={requestTutoring}
+                    onChange={(e) => setRequestTutoring(e.target.checked)}
+                    className="mt-1 w-5 h-5 rounded border-slate-300"
+                    data-testid="tutoring-checkbox-subscription"
+                  />
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-heading text-lg font-bold text-green-800">Online Tutoring</h4>
+                        <p className="text-green-700 text-sm">Een-op-een sessies met 'n onderwyser</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-green-600">R150</div>
+                        <div className="text-sm text-green-600">/maand</div>
+                      </div>
+                    </div>
+                    
+                    {requestTutoring && (
+                      <div className="mt-4 pt-4 border-t border-green-200">
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-sm font-semibold text-green-800 mb-2">Voorkeur Dae:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {availableDays.map(day => (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => toggleDay(day)}
+                                  className={`px-3 py-1 rounded-full text-sm ${
+                                    tutoringDays.includes(day) 
+                                      ? 'bg-green-600 text-white' 
+                                      : 'bg-white border border-green-300 text-green-700 hover:border-green-500'
+                                  }`}
+                                >
+                                  {day}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-green-800 mb-2">Voorkeur Tye:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {availableTimes.map(time => (
+                                <button
+                                  key={time}
+                                  type="button"
+                                  onClick={() => toggleTime(time)}
+                                  className={`px-3 py-1 rounded-full text-sm ${
+                                    tutoringTimes.includes(time)
+                                      ? 'bg-green-600 text-white'
+                                      : 'bg-white border border-green-300 text-green-700 hover:border-green-500'
+                                  }`}
+                                >
+                                  {time}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <Button 
+                            onClick={submitTutoringRequest}
+                            disabled={submittingTutoring}
+                            className="w-full bg-green-600 hover:bg-green-700"
+                            testId="submit-tutoring-btn"
+                          >
+                            {submittingTutoring ? "Stuur..." : "Dien Tutoring Aanvraag In"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>
