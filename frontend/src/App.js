@@ -923,19 +923,18 @@ const RegisterPage = ({ onRegister }) => {
               />
               
               <div className="mb-4">
-                <label className="block text-sm font-semibold text-text-secondary mb-2">Geskatte Aantal Leerders</label>
-                <select
+                <label className="block text-sm font-semibold text-text-secondary mb-2">Aantal Leerders</label>
+                <input
+                  type="number"
                   className="input-field"
+                  min="1"
+                  max="5000"
                   value={schoolForm.learner_count}
-                  onChange={(e) => setSchoolForm({...schoolForm, learner_count: parseInt(e.target.value)})}
-                  data-testid="learner-count-select"
-                >
-                  <option value={10}>10 - 50 leerders</option>
-                  <option value={50}>50 - 100 leerders</option>
-                  <option value={100}>100 - 200 leerders</option>
-                  <option value={200}>200 - 500 leerders</option>
-                  <option value={500}>500+ leerders</option>
-                </select>
+                  onChange={(e) => setSchoolForm({...schoolForm, learner_count: parseInt(e.target.value) || 1})}
+                  placeholder="bv. 250"
+                  data-testid="learner-count-input"
+                />
+                <p className="text-xs text-text-muted mt-1">Tik die presiese of geskatte aantal leerders in</p>
               </div>
               
               {error && <p className="text-accent-500 text-sm mb-4">{error}</p>}
