@@ -177,10 +177,10 @@ const LandingPage = () => {
   
   return (
     <PageTransition>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-gradient-to-b from-orange-50 via-amber-50 to-yellow-50">
         {/* Hero Section */}
         <div className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary-50 to-secondary-50 opacity-50" />
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-100 via-amber-50 to-yellow-100 opacity-70" />
           <div className="max-w-6xl mx-auto px-4 py-16 relative">
             <motion.div 
               className="text-center"
@@ -212,23 +212,23 @@ const LandingPage = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               {/* Cartoon illustration hero */}
-              <div className="bg-gradient-to-br from-primary-100 via-secondary-100 to-accent-100 rounded-3xl shadow-2xl mx-auto max-w-3xl w-full p-8 md:p-12">
+              <div className="bg-gradient-to-br from-orange-100 via-amber-100 to-yellow-100 rounded-3xl shadow-2xl mx-auto max-w-3xl w-full p-8 md:p-12 border border-orange-200">
                 <div className="flex flex-col md:flex-row items-center justify-center gap-8">
                   <div className="text-center">
                     <div className="text-8xl md:text-9xl mb-4">📚</div>
-                    <p className="text-xl font-heading font-bold text-primary-600">Lees</p>
+                    <p className="text-xl font-heading font-bold text-orange-600">Lees</p>
                   </div>
                   <div className="text-center">
                     <div className="text-8xl md:text-9xl mb-4">🎧</div>
-                    <p className="text-xl font-heading font-bold text-secondary-600">Luister</p>
+                    <p className="text-xl font-heading font-bold text-amber-600">Luister</p>
                   </div>
                   <div className="text-center">
                     <div className="text-8xl md:text-9xl mb-4">✍️</div>
-                    <p className="text-xl font-heading font-bold text-accent-600">Skryf</p>
+                    <p className="text-xl font-heading font-bold text-yellow-600">Skryf</p>
                   </div>
                   <div className="text-center">
                     <div className="text-8xl md:text-9xl mb-4">⭐</div>
-                    <p className="text-xl font-heading font-bold text-purple-600">Groei</p>
+                    <p className="text-xl font-heading font-bold text-red-500">Groei</p>
                   </div>
                 </div>
               </div>
@@ -237,16 +237,16 @@ const LandingPage = () => {
         </div>
 
         {/* Features */}
-        <div className="max-w-6xl mx-auto px-4 py-16">
+        <div className="max-w-6xl mx-auto px-4 py-16 bg-gradient-to-r from-amber-50/50 via-orange-50/30 to-yellow-50/50">
           <h2 className="font-heading text-3xl md:text-4xl font-bold text-center mb-12">
             Hoe Werk Dit?
           </h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { icon: BookOpen, title: "Begripstoetse", desc: "Lees stories en beantwoord vrae om begrip te verbeter" },
-              { icon: Mic, title: "Hardoplees", desc: "Neem jouself op en kry terugvoer oor jou leesspoed" },
-              { icon: Headphones, title: "Luistertoetse", desc: "Luister na tekste en verbeter jou gehoor" },
-              { icon: Edit3, title: "Speltoetse", desc: "Oefen spelling met ouderdomsgepaste woorde" }
+              { icon: BookOpen, title: "Begripstoetse", desc: "Lees stories en beantwoord vrae om begrip te verbeter", color: "text-orange-500" },
+              { icon: Mic, title: "Hardoplees", desc: "Neem jouself op en kry terugvoer oor jou leesspoed", color: "text-amber-500" },
+              { icon: Headphones, title: "Luistertoetse", desc: "Luister na tekste en verbeter jou gehoor", color: "text-yellow-600" },
+              { icon: Edit3, title: "Speltoetse", desc: "Oefen spelling met ouderdomsgepaste woorde", color: "text-red-400" }
             ].map((feature, i) => (
               <motion.div
                 key={feature.title}
@@ -254,8 +254,8 @@ const LandingPage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }}
               >
-                <Card className="text-center h-full">
-                  <feature.icon className="w-12 h-12 text-primary-500 mx-auto mb-4" strokeWidth={2} />
+                <Card className="text-center h-full bg-white/80 backdrop-blur-sm border border-orange-100">
+                  <feature.icon className={`w-12 h-12 ${feature.color} mx-auto mb-4`} strokeWidth={2} />
                   <h3 className="font-heading text-xl font-semibold mb-2">{feature.title}</h3>
                   <p className="text-text-secondary">{feature.desc}</p>
                 </Card>
@@ -265,7 +265,7 @@ const LandingPage = () => {
         </div>
 
         {/* Pricing */}
-        <div className="bg-white py-16">
+        <div className="py-16 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
           <div className="max-w-4xl mx-auto px-4">
             <h2 className="font-heading text-3xl md:text-4xl font-bold text-center mb-4">
               Pryse
@@ -308,24 +308,24 @@ const LandingPage = () => {
         </div>
 
         {/* Online Tutoring Section */}
-        <div className="py-16 bg-gradient-to-br from-purple-50 to-blue-50">
+        <div className="py-16 bg-gradient-to-br from-amber-100 via-orange-50 to-yellow-100">
           <div className="max-w-4xl mx-auto px-4">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <Card className="border-2 border-purple-400 bg-white overflow-hidden">
+              <Card className="border-2 border-orange-300 bg-white/90 backdrop-blur-sm overflow-hidden">
                 <div className="md:flex items-center gap-8">
                   <div className="md:w-1/3 text-center mb-6 md:mb-0">
-                    <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <MessageSquare className="w-12 h-12 text-purple-600" />
+                    <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <MessageSquare className="w-12 h-12 text-orange-600" />
                     </div>
-                    <div className="text-4xl font-bold text-purple-600">R150</div>
+                    <div className="text-4xl font-bold text-orange-600">R150</div>
                     <div className="text-text-muted">/maand</div>
                   </div>
                   <div className="md:w-2/3">
-                    <h3 className="font-heading text-2xl font-bold mb-3 text-purple-700">
+                    <h3 className="font-heading text-2xl font-bold mb-3 text-orange-700">
                       Online Tutoring
                     </h3>
                     <p className="text-text-secondary mb-4">
@@ -335,18 +335,18 @@ const LandingPage = () => {
                     </p>
                     <ul className="space-y-2 mb-6">
                       <li className="flex items-center gap-2">
-                        <Check className="w-5 h-5 text-purple-500" /> Persoonlike aandag vir jou kind
+                        <Check className="w-5 h-5 text-orange-500" /> Persoonlike aandag vir jou kind
                       </li>
                       <li className="flex items-center gap-2">
-                        <Check className="w-5 h-5 text-purple-500" /> Buigsame tye wat by jou pas
+                        <Check className="w-5 h-5 text-orange-500" /> Buigsame tye wat by jou pas
                       </li>
                       <li className="flex items-center gap-2">
-                        <Check className="w-5 h-5 text-purple-500" /> Fokus op lees & begrip
+                        <Check className="w-5 h-5 text-orange-500" /> Fokus op lees & begrip
                       </li>
                     </ul>
                     <Button 
                       onClick={() => navigate("/register")} 
-                      className="bg-purple-600 hover:bg-purple-700"
+                      className="bg-orange-500 hover:bg-orange-600"
                       testId="tutoring-enquire-btn"
                     >
                       <Phone className="w-4 h-4 mr-2" />
@@ -360,10 +360,10 @@ const LandingPage = () => {
         </div>
 
         {/* Footer */}
-        <footer className="bg-text-primary text-white py-8">
+        <footer className="bg-gradient-to-r from-orange-700 via-amber-700 to-orange-800 text-white py-8">
           <div className="max-w-6xl mx-auto px-4 text-center">
             <p className="font-heading text-xl mb-2">Lees is Duidelik</p>
-            <p className="text-slate-400">Gebou met liefde vir Suid-Afrikaanse leerders</p>
+            <p className="text-orange-200">Gebou met liefde vir Suid-Afrikaanse leerders</p>
           </div>
         </footer>
       </div>
