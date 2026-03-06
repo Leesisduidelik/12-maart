@@ -60,6 +60,33 @@ GET  /api/exercise-instructions - Get exercise instructions
 PUT  /api/admin/exercise-instructions - Update instructions
 ```
 
+### Mar 6, 2026 - Bug Fix
+
+#### Image Upload Button in List View (COMPLETED)
+- **Fixed**: Image upload button was missing in "List View" of Admin → Tekste tab
+- Now visible when expanding Grade 1-3 texts with "Wys meer" button
+- Shows "Prent (Graad 1-3):" section with:
+  - Existing image preview (if uploaded)
+  - "💡 Voeg 'n prent by vir jonger leerders" hint
+  - "Laai Prent Op" button
+- Consistent with folder view functionality
+- Added image icon indicator in text header when image exists
+
+## Completed Features Summary
+- ✅ Parent-learner linking (name + surname + password)
+- ✅ Text editing in admin
+- ✅ Audio upload/recording for spelling & listening tests
+- ✅ Comprehension test redo button (50% score)
+- ✅ Keyword matching for typed answers
+- ✅ Learner suspension for non-payment
+- ✅ Online tutoring requests (R150/month)
+- ✅ Custom exercise instructions
+- ✅ Bulk text upload via Excel
+- ✅ Image upload for texts (Grade 1-3)
+- ✅ Weekly progress copy for WhatsApp (cost-free)
+- ✅ Admin password change
+- ✅ Term field for texts
+
 ## Next Tasks
-1. Test all new features
-2. Redeploy to production
+1. User to test all features
+2. Deploy to production when ready

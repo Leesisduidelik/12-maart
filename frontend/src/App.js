@@ -3529,11 +3529,13 @@ const TextsTab = ({ texts, setTexts }) => {
                       <div className="flex items-center gap-2">
                         <h4 className="font-semibold">{text.title}</h4>
                         {text.audio_url && <Volume2 className="w-4 h-4 text-primary-500" title="Het oudio" />}
+                        {text.image_url && <Image className="w-4 h-4 text-blue-500" title="Het prent" />}
                       </div>
                       <p className="text-sm text-text-muted">
                         Graad {text.grade_level} | {textTypeLabels[text.text_type] || text.text_type} | 
                         {text.is_ai_generated ? " AI" : " Handmatig"}
                         {text.questions?.length > 0 && ` | ${text.questions.length} vrae`}
+                        {text.image_url && " | 🖼️ Prent"}
                       </p>
                       
                       <button
@@ -3557,6 +3559,36 @@ const TextsTab = ({ texts, setTexts }) => {
                                   <span className="text-text-muted ml-2">(Antw: {q.correct_answer})</span>
                                 </div>
                               ))}
+                            </div>
+                          )}
+
+                          {/* Image Upload for Grade 1-3 in List View */}
+                          {text.grade_level <= 3 && (
+                            <div className="mt-3 border-t pt-3">
+                              <p className="text-sm font-semibold mb-2">Prent (Graad 1-3):</p>
+                              {text.image_url ? (
+                                <div className="mb-2">
+                                  <img src={`${BACKEND_URL}${text.image_url}`} alt={text.title} className="max-w-[200px] h-auto rounded border" />
+                                </div>
+                              ) : (
+                                <p className="text-xs text-blue-600 mb-2">💡 Voeg 'n prent by vir jonger leerders</p>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                id={`image-upload-list-${text.id}`}
+                                className="hidden"
+                                onChange={(e) => e.target.files?.[0] && handleImageUpload(text.id, e.target.files[0])}
+                              />
+                              <button
+                                onClick={() => document.getElementById(`image-upload-list-${text.id}`)?.click()}
+                                className="flex items-center gap-1 text-sm px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                                disabled={uploadingImage === text.id}
+                                data-testid={`upload-image-list-${text.id}`}
+                              >
+                                <Image className="w-4 h-4" />
+                                {uploadingImage === text.id ? "Laai..." : text.image_url ? "Vervang Prent" : "Laai Prent Op"}
+                              </button>
                             </div>
                           )}
 

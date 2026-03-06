@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 class APITester:
-    def __init__(self, base_url="https://learner-app-dev.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://lees-preview-build.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.admin_token = None
         self.learner_token = None
@@ -438,7 +438,7 @@ class APITester:
 
 def main():
     print("🚀 Starting Lees is Duidelik API Testing")
-    print(f"🌐 Backend URL: https://learner-app-dev.preview.emergentagent.com/api")
+    print(f"🌐 Backend URL: https://lees-preview-build.preview.emergentagent.com/api")
     print(f"🕒 Test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     tester = APITester()
