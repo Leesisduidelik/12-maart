@@ -307,6 +307,58 @@ const LandingPage = () => {
           </div>
         </div>
 
+        {/* Online Tutoring Section */}
+        <div className="py-16 bg-gradient-to-br from-purple-50 to-blue-50">
+          <div className="max-w-4xl mx-auto px-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <Card className="border-2 border-purple-400 bg-white overflow-hidden">
+                <div className="md:flex items-center gap-8">
+                  <div className="md:w-1/3 text-center mb-6 md:mb-0">
+                    <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <MessageSquare className="w-12 h-12 text-purple-600" />
+                    </div>
+                    <div className="text-4xl font-bold text-purple-600">R150</div>
+                    <div className="text-text-muted">/maand</div>
+                  </div>
+                  <div className="md:w-2/3">
+                    <h3 className="font-heading text-2xl font-bold mb-3 text-purple-700">
+                      Online Tutoring
+                    </h3>
+                    <p className="text-text-secondary mb-4">
+                      Persoonlike een-op-een sessies met 'n gekwalifiseerde onderwyser. 
+                      Tans fokus ons op <strong>leesvaardighede</strong>, maar ons brei 
+                      binnekort uit na meer vakke soos die aanvraag groei.
+                    </p>
+                    <ul className="space-y-2 mb-6">
+                      <li className="flex items-center gap-2">
+                        <Check className="w-5 h-5 text-purple-500" /> Persoonlike aandag vir jou kind
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-5 h-5 text-purple-500" /> Buigsame tye wat by jou pas
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-5 h-5 text-purple-500" /> Fokus op lees & begrip
+                      </li>
+                    </ul>
+                    <Button 
+                      onClick={() => navigate("/register")} 
+                      className="bg-purple-600 hover:bg-purple-700"
+                      testId="tutoring-enquire-btn"
+                    >
+                      <Phone className="w-4 h-4 mr-2" />
+                      Vra Aan / Kontak Ons
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          </div>
+        </div>
+
         {/* Footer */}
         <footer className="bg-text-primary text-white py-8">
           <div className="max-w-6xl mx-auto px-4 text-center">
