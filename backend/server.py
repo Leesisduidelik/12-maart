@@ -3243,6 +3243,108 @@ async def get_woordbou_exercises(
     exercises = await db.woordbou.find(query, {"_id": 0}).to_list(100)
     return {"exercises": exercises}
 
+# ==================== WOORDBOU CHALLENGE - LEADERBOARD & POINTS ====================
+# NOTE: These routes MUST be defined before /{woordbou_id} routes to avoid path conflicts
+
+@api_router.get("/woordbou/leaderboard")
+async def get_woordbou_leaderboard(current_user: dict = Depends(get_current_user)):
+    """Get Woordbou leaderboard - top scorers"""
+    # Aggregate exercise results for woordbou
+    pipeline = [
+        {"$match": {"exercise_type": "woordbou", "is_correct": True}},
+        {"$group": {
+            "_id": "$learner_id",
+            "correct_count": {"$sum": 1},
+            "total_time": {"$sum": "$time_seconds"}
+        }},
+        {"$sort": {"correct_count": -1, "total_time": 1}},
+        {"$limit": 10}
+    ]
+    
+    results = await db.exercise_results.aggregate(pipeline).to_list(10)
+    
+    # Enrich with learner names
+    leaderboard = []
+    for i, entry in enumerate(results):
+        learner = await db.learners.find_one({"id": entry["_id"]}, {"_id": 0, "name": 1, "school_name": 1})
+        leaderboard.append({
+            "rank": i + 1,
+            "learner_id": entry["_id"],
+            "name": learner.get("name", "Onbekend") if learner else "Onbekend",
+            "school": learner.get("school_name", "") if learner else "",
+            "correct_count": entry["correct_count"],
+            "total_time": round(entry.get("total_time", 0), 1)
+        })
+    
+    return {"leaderboard": leaderboard}
+
+@api_router.get("/woordbou/my-stats")
+async def get_my_woordbou_stats(current_user: dict = Depends(get_current_user)):
+    """Get current user's Woordbou statistics"""
+    if current_user["user_type"] != "learner":
+        raise HTTPException(status_code=403, detail="Slegs vir leerders")
+    
+    learner_id = current_user["user_id"]
+    
+    # Get total correct answers
+    correct_count = await db.exercise_results.count_documents({
+        "learner_id": learner_id,
+        "exercise_type": "woordbou",
+        "is_correct": True
+    })
+    
+    # Get total attempts
+    total_attempts = await db.exercise_results.count_documents({
+        "learner_id": learner_id,
+        "exercise_type": "woordbou"
+    })
+    
+    # Calculate streak (consecutive days with correct answers)
+    recent_results = await db.exercise_results.find({
+        "learner_id": learner_id,
+        "exercise_type": "woordbou",
+        "is_correct": True
+    }, {"_id": 0, "created_at": 1}).sort("created_at", -1).to_list(30)
+    
+    streak = 0
+    if recent_results:
+        today = datetime.now(timezone.utc).date()
+        dates = set()
+        for r in recent_results:
+            try:
+                dt = datetime.fromisoformat(r["created_at"].replace('Z', '+00:00')).date()
+                dates.add(dt)
+            except:
+                pass
+        
+        # Count consecutive days
+        check_date = today
+        while check_date in dates:
+            streak += 1
+            check_date = check_date - timedelta(days=1)
+    
+    # Get rank
+    pipeline = [
+        {"$match": {"exercise_type": "woordbou", "is_correct": True}},
+        {"$group": {"_id": "$learner_id", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    all_scores = await db.exercise_results.aggregate(pipeline).to_list(1000)
+    
+    rank = 1
+    for score in all_scores:
+        if score["_id"] == learner_id:
+            break
+        rank += 1
+    
+    return {
+        "correct_count": correct_count,
+        "total_attempts": total_attempts,
+        "streak": streak,
+        "rank": rank if correct_count > 0 else None,
+        "accuracy": round(correct_count / total_attempts * 100, 1) if total_attempts > 0 else 0
+    }
+
 @api_router.get("/woordbou/{woordbou_id}")
 async def get_woordbou_exercise(woordbou_id: str, current_user: dict = Depends(get_current_user)):
     """Get a specific Woordbou exercise"""
@@ -3612,107 +3714,6 @@ async def submit_klanktoets(submission: KlanktoetsSubmission, current_user: dict
         "score": round(score_percentage, 1),
         "graded_answers": graded_answers,
         "message": f"Jy het {correct_count} uit {total_points} reg gekry! ({round(score_percentage)}%)"
-    }
-
-# ==================== WOORDBOU CHALLENGE - LEADERBOARD & POINTS ====================
-
-@api_router.get("/woordbou/leaderboard")
-async def get_woordbou_leaderboard(current_user: dict = Depends(get_current_user)):
-    """Get Woordbou leaderboard - top scorers"""
-    # Aggregate exercise results for woordbou
-    pipeline = [
-        {"$match": {"exercise_type": "woordbou", "is_correct": True}},
-        {"$group": {
-            "_id": "$learner_id",
-            "correct_count": {"$sum": 1},
-            "total_time": {"$sum": "$time_seconds"}
-        }},
-        {"$sort": {"correct_count": -1, "total_time": 1}},
-        {"$limit": 10}
-    ]
-    
-    results = await db.exercise_results.aggregate(pipeline).to_list(10)
-    
-    # Enrich with learner names
-    leaderboard = []
-    for i, entry in enumerate(results):
-        learner = await db.learners.find_one({"id": entry["_id"]}, {"_id": 0, "name": 1, "school_name": 1})
-        leaderboard.append({
-            "rank": i + 1,
-            "learner_id": entry["_id"],
-            "name": learner.get("name", "Onbekend") if learner else "Onbekend",
-            "school": learner.get("school_name", "") if learner else "",
-            "correct_count": entry["correct_count"],
-            "total_time": round(entry.get("total_time", 0), 1)
-        })
-    
-    return {"leaderboard": leaderboard}
-
-@api_router.get("/woordbou/my-stats")
-async def get_my_woordbou_stats(current_user: dict = Depends(get_current_user)):
-    """Get current user's Woordbou statistics"""
-    if current_user["user_type"] != "learner":
-        raise HTTPException(status_code=403, detail="Slegs vir leerders")
-    
-    learner_id = current_user["user_id"]
-    
-    # Get total correct answers
-    correct_count = await db.exercise_results.count_documents({
-        "learner_id": learner_id,
-        "exercise_type": "woordbou",
-        "is_correct": True
-    })
-    
-    # Get total attempts
-    total_attempts = await db.exercise_results.count_documents({
-        "learner_id": learner_id,
-        "exercise_type": "woordbou"
-    })
-    
-    # Calculate streak (consecutive days with correct answers)
-    recent_results = await db.exercise_results.find({
-        "learner_id": learner_id,
-        "exercise_type": "woordbou",
-        "is_correct": True
-    }, {"_id": 0, "created_at": 1}).sort("created_at", -1).to_list(30)
-    
-    streak = 0
-    if recent_results:
-        today = datetime.now(timezone.utc).date()
-        dates = set()
-        for r in recent_results:
-            try:
-                dt = datetime.fromisoformat(r["created_at"].replace('Z', '+00:00')).date()
-                dates.add(dt)
-            except:
-                pass
-        
-        # Count consecutive days
-        check_date = today
-        while check_date in dates:
-            streak += 1
-            check_date = check_date - timedelta(days=1)
-    
-    # Get rank
-    pipeline = [
-        {"$match": {"exercise_type": "woordbou", "is_correct": True}},
-        {"$group": {"_id": "$learner_id", "count": {"$sum": 1}}},
-        {"$sort": {"count": -1}}
-    ]
-    all_scores = await db.exercise_results.aggregate(pipeline).to_list(1000)
-    
-    rank = 1
-    for score in all_scores:
-        if score["_id"] == learner_id:
-            break
-        rank += 1
-    
-    return {
-        "correct_count": correct_count,
-        "total_attempts": total_attempts,
-        "streak": streak,
-        "rank": rank if correct_count > 0 else None,
-        "accuracy": round(correct_count / total_attempts * 100, 1) if total_attempts > 0 else 0
     }
 
 @api_router.get("/uploads/logo/{filename}")

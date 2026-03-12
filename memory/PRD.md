@@ -1,92 +1,93 @@
-# Lees is Duidelik - PRD
+# Lees is Duidelik - Product Requirements Document
 
 ## Original Problem Statement
-Afrikaans reading learning app for children (Graad 1-9) with EFT payment system for South African users.
+Afrikaans educational reading platform for learners with admin panel, grade 1-3 specific features, and more.
 
-## Architecture
-- **Frontend**: React.js with Tailwind CSS
-- **Backend**: FastAPI (Python)
-- **Database**: MongoDB
-- **Authentication**: JWT-based
+## Latest Session Updates (March 12, 2026)
+
+### Session 1 - Core Features Added:
+1. **School Edit (Wysig) Function**: Admin can edit school info via modal
+2. **Woordbou (Word Building) for Grade 1-3**: Drag letters to build words
+3. **Speltoets/Klanktoets (Grade 1-3)**: Audio/image-based spelling tests
+
+### Session 2 - New Features Added:
+1. **AI Afrikaans TTS Demo**: Test how AI reads Afrikaans with 9 voice options
+2. **OCR Letter Extraction**: Auto-extract letters from uploaded word card images using GPT-4o vision
+3. **Logo Update**: Lees is Duidelik colorful logo now displayed on landing page and footer
+4. **Woordbou Challenge**: Stats (correct count, streak, accuracy, rank) and leaderboard for learners
+
+## User Personas
+1. **Admin** - Manages schools, learners, content, payments, TTS demo
+2. **Parent/Ouer** - Monitors child progress, manages subscriptions  
+3. **Learner/Leerder** - Grades 1-7, completes exercises, competes in challenges
+4. **School Admin** - Registers learners via school codes
+
+## Core Requirements
+- Afrikaans language interface
+- Subscription-based access
+- School registration with unique codes
+- Exercise types: Reading, Comprehension, Listening, Spelling, Woordbou (Grade 1-3), Klanktoets (Grade 1-3)
+- Progress tracking and leaderboards
+
+## Tech Stack
+- Frontend: React.js with Tailwind CSS
+- Backend: FastAPI (Python)
+- Database: MongoDB
+- AI: OpenAI TTS (via Emergent LLM key), GPT-4o Vision for OCR
+- Auth: JWT-based authentication
 
 ## What's Been Implemented
 
-### Feb 27, 2026 - New Features
+### Backend Endpoints
+- `/api/schools/{id}` PUT - Edit school info
+- `/api/woordbou` CRUD - Word building exercises
+- `/api/klanktoets` CRUD - Sound/spelling tests
+- `/api/woordbou/leaderboard` GET - Top 10 word builders
+- `/api/woordbou/my-stats` GET - Learner's Woordbou statistics
+- `/api/tts/demo` POST - Generate Afrikaans TTS audio
+- `/api/tts/voices` GET - List available TTS voices
+- `/api/ocr/extract-letters` POST - Extract letters from images
 
-#### 1. Learner Account Suspension (COMPLETED)
-- Admin can **suspend/activate** learner accounts
-- Suspended learners can log in but **cannot access exercises**
-- Clear message shown: "Rekening gesuspendeer: Betaling uitstaande"
-- Red badge shows "Gesuspendeer" in learner list
-- One-click toggle button in Admin → Leerders tab
+### Frontend Components
+- School Edit Modal in Admin → Skole
+- Woordbou Tab in Admin with OCR button
+- Klanktoets Tab in Admin
+- WoordbouExercisePage with Challenge stats and leaderboard
+- KlanktoetsExercisePage
+- TTS Demo section in Admin → Instellings
+- Logo on Landing Page and Footer
 
-#### 2. Online Tutoring Requests (R150/month) (COMPLETED)
-- **New service offering**: Online tutoring at R150/month
-- Request form during learner registration
-- Learner/Parent selects preferred days and times
-- Requests appear in new **"Tutoring" tab** in Admin dashboard
-- Status tracking: Pending → Contacted → Confirmed → Cancelled
-- **Direct WhatsApp link** for each request
-- Requests auto-created when learners register with tutoring option
+## Admin Credentials
+- Email: admin@leesisduidelik.co.za
+- Password: 1Lees2*#*
 
-#### 3. Exercise Instructions (COMPLETED)
-- Admin can set **custom instructions** for each exercise type
-- Settings → "📋 Oefening Instruksies"
-- Separate instructions for:
-  - Begripstoets (Comprehension)
-  - Hardoplees (Reading aloud)
-  - Speltoets (Spelling)
-  - Luistertoets (Listening)
-- Instructions displayed to learners before each exercise
+## Prioritized Backlog
 
-### Previous Updates
-- Parent-Learner linking with name + surname
-- Admin text editing
-- Audio upload/recording for tests
-- Hardoplees feedback improvements
-- Begripstoets redo button (2nd attempt = 50%)
-- Keyword matching for typed answers
-- Weekly progress generation for WhatsApp
-- Admin password change
+### P0 (Complete)
+- [x] School edit functionality
+- [x] Woordbou admin management + learner exercise
+- [x] Klanktoets admin management + learner exercise
+- [x] AI TTS demo
+- [x] OCR letter extraction
+- [x] Logo update
+- [x] Woordbou Challenge with leaderboard
 
-## API Endpoints Added
+### P1 (Next)
+- [ ] Klanktoets Challenge with leaderboard
+- [ ] Badges/achievements for streaks
+- [ ] Parent notification for test scores
+
+### P2 (Future)
+- [ ] Print-friendly worksheets
+- [ ] Bulk import for exercises
+- [ ] School-level competitions
+
+## Environment Variables
 ```
-POST /api/admin/learner/suspend - Suspend/unsuspend learner
-GET  /api/admin/learners/suspended - List suspended learners
-POST /api/tutoring/request - Create tutoring request
-GET  /api/admin/tutoring/requests - List all tutoring requests
-PUT  /api/admin/tutoring/request/{id}?status=X - Update request status
-GET  /api/exercise-instructions - Get exercise instructions
-PUT  /api/admin/exercise-instructions - Update instructions
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=test_database
+ADMIN_EMAIL=admin@leesisduidelik.co.za
+ADMIN_PASSWORD=1Lees2*#*
+JWT_SECRET=super-secret-jwt-key-for-lees-is-duidelik
+EMERGENT_LLM_KEY=sk-emergent-dB76985E5EeA142A9E
 ```
-
-### Mar 6, 2026 - Bug Fix
-
-#### Image Upload Button in List View (COMPLETED)
-- **Fixed**: Image upload button was missing in "List View" of Admin → Tekste tab
-- Now visible when expanding Grade 1-3 texts with "Wys meer" button
-- Shows "Prent (Graad 1-3):" section with:
-  - Existing image preview (if uploaded)
-  - "💡 Voeg 'n prent by vir jonger leerders" hint
-  - "Laai Prent Op" button
-- Consistent with folder view functionality
-- Added image icon indicator in text header when image exists
-
-## Completed Features Summary
-- ✅ Parent-learner linking (name + surname + password)
-- ✅ Text editing in admin
-- ✅ Audio upload/recording for spelling & listening tests
-- ✅ Comprehension test redo button (50% score)
-- ✅ Keyword matching for typed answers
-- ✅ Learner suspension for non-payment
-- ✅ Online tutoring requests (R150/month)
-- ✅ Custom exercise instructions
-- ✅ Bulk text upload via Excel
-- ✅ Image upload for texts (Grade 1-3)
-- ✅ Weekly progress copy for WhatsApp (cost-free)
-- ✅ Admin password change
-- ✅ Term field for texts
-
-## Next Tasks
-1. User to test all features
-2. Deploy to production when ready
