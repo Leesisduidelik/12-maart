@@ -17,8 +17,9 @@ import aiofiles
 import tempfile
 import asyncio
 import resend
-from emergentintegrations.llm.chat import LlmChat, UserMessage
-from emergentintegrations.llm.openai import OpenAISpeechToText
+from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+from emergentintegrations.llm.openai import OpenAISpeechToText, OpenAITextToSpeech
+import base64
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -3613,6 +3614,107 @@ async def submit_klanktoets(submission: KlanktoetsSubmission, current_user: dict
         "message": f"Jy het {correct_count} uit {total_points} reg gekry! ({round(score_percentage)}%)"
     }
 
+# ==================== WOORDBOU CHALLENGE - LEADERBOARD & POINTS ====================
+
+@api_router.get("/woordbou/leaderboard")
+async def get_woordbou_leaderboard(current_user: dict = Depends(get_current_user)):
+    """Get Woordbou leaderboard - top scorers"""
+    # Aggregate exercise results for woordbou
+    pipeline = [
+        {"$match": {"exercise_type": "woordbou", "is_correct": True}},
+        {"$group": {
+            "_id": "$learner_id",
+            "correct_count": {"$sum": 1},
+            "total_time": {"$sum": "$time_seconds"}
+        }},
+        {"$sort": {"correct_count": -1, "total_time": 1}},
+        {"$limit": 10}
+    ]
+    
+    results = await db.exercise_results.aggregate(pipeline).to_list(10)
+    
+    # Enrich with learner names
+    leaderboard = []
+    for i, entry in enumerate(results):
+        learner = await db.learners.find_one({"id": entry["_id"]}, {"_id": 0, "name": 1, "school_name": 1})
+        leaderboard.append({
+            "rank": i + 1,
+            "learner_id": entry["_id"],
+            "name": learner.get("name", "Onbekend") if learner else "Onbekend",
+            "school": learner.get("school_name", "") if learner else "",
+            "correct_count": entry["correct_count"],
+            "total_time": round(entry.get("total_time", 0), 1)
+        })
+    
+    return {"leaderboard": leaderboard}
+
+@api_router.get("/woordbou/my-stats")
+async def get_my_woordbou_stats(current_user: dict = Depends(get_current_user)):
+    """Get current user's Woordbou statistics"""
+    if current_user["user_type"] != "learner":
+        raise HTTPException(status_code=403, detail="Slegs vir leerders")
+    
+    learner_id = current_user["user_id"]
+    
+    # Get total correct answers
+    correct_count = await db.exercise_results.count_documents({
+        "learner_id": learner_id,
+        "exercise_type": "woordbou",
+        "is_correct": True
+    })
+    
+    # Get total attempts
+    total_attempts = await db.exercise_results.count_documents({
+        "learner_id": learner_id,
+        "exercise_type": "woordbou"
+    })
+    
+    # Calculate streak (consecutive days with correct answers)
+    recent_results = await db.exercise_results.find({
+        "learner_id": learner_id,
+        "exercise_type": "woordbou",
+        "is_correct": True
+    }, {"_id": 0, "created_at": 1}).sort("created_at", -1).to_list(30)
+    
+    streak = 0
+    if recent_results:
+        today = datetime.now(timezone.utc).date()
+        dates = set()
+        for r in recent_results:
+            try:
+                dt = datetime.fromisoformat(r["created_at"].replace('Z', '+00:00')).date()
+                dates.add(dt)
+            except:
+                pass
+        
+        # Count consecutive days
+        check_date = today
+        while check_date in dates:
+            streak += 1
+            check_date = check_date - timedelta(days=1)
+    
+    # Get rank
+    pipeline = [
+        {"$match": {"exercise_type": "woordbou", "is_correct": True}},
+        {"$group": {"_id": "$learner_id", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    all_scores = await db.exercise_results.aggregate(pipeline).to_list(1000)
+    
+    rank = 1
+    for score in all_scores:
+        if score["_id"] == learner_id:
+            break
+        rank += 1
+    
+    return {
+        "correct_count": correct_count,
+        "total_attempts": total_attempts,
+        "streak": streak,
+        "rank": rank if correct_count > 0 else None,
+        "accuracy": round(correct_count / total_attempts * 100, 1) if total_attempts > 0 else 0
+    }
+
 @api_router.get("/uploads/logo/{filename}")
 async def serve_logo(filename: str):
     """Serve logo file"""
@@ -3621,6 +3723,147 @@ async def serve_logo(filename: str):
         raise HTTPException(status_code=404, detail="Logo nie gevind nie")
     
     return FileResponse(file_path)
+
+# ==================== AI AFRIKAANS TTS DEMO ====================
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "nova"  # alloy, ash, coral, echo, fable, nova, onyx, sage, shimmer
+
+@api_router.post("/tts/demo")
+async def generate_tts_demo(request: TTSRequest, current_user: dict = Depends(get_current_user)):
+    """Generate Afrikaans TTS demo audio"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    if not api_key:
+        raise HTTPException(status_code=500, detail="TTS API sleutel nie gekonfigureer nie")
+    
+    try:
+        tts = OpenAITextToSpeech(api_key=api_key)
+        
+        # Generate speech - using tts-1-hd for better quality
+        audio_bytes = await tts.generate_speech(
+            text=request.text,
+            model="tts-1-hd",
+            voice=request.voice,
+            response_format="mp3"
+        )
+        
+        # Save to temp file
+        upload_dir = Path("/app/uploads/audio/tts_demo")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        filename = f"tts_demo_{uuid.uuid4()}.mp3"
+        file_path = upload_dir / filename
+        
+        with open(file_path, "wb") as f:
+            f.write(audio_bytes)
+        
+        audio_url = f"/api/uploads/audio/tts_demo/{filename}"
+        
+        # Also return base64 for immediate playback
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+        
+        return {
+            "audio_url": audio_url,
+            "audio_base64": audio_base64,
+            "voice": request.voice,
+            "text": request.text,
+            "message": "TTS audio gegenereer"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS fout: {str(e)}")
+
+@api_router.get("/uploads/audio/tts_demo/{filename}")
+async def serve_tts_demo(filename: str):
+    """Serve TTS demo audio files"""
+    file_path = Path(f"/app/uploads/audio/tts_demo/{filename}")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Oudio nie gevind nie")
+    return FileResponse(file_path, media_type="audio/mpeg")
+
+@api_router.get("/tts/voices")
+async def get_tts_voices():
+    """Get available TTS voices"""
+    return {
+        "voices": [
+            {"id": "alloy", "name": "Alloy", "description": "Neutraal, gebalanseerd"},
+            {"id": "ash", "name": "Ash", "description": "Duidelik, artikulerend"},
+            {"id": "coral", "name": "Coral", "description": "Warm, vriendelik"},
+            {"id": "echo", "name": "Echo", "description": "Glad, kalm"},
+            {"id": "fable", "name": "Fable", "description": "Ekspressief, verhalend"},
+            {"id": "nova", "name": "Nova", "description": "Energiek, vrolik"},
+            {"id": "onyx", "name": "Onyx", "description": "Diep, gesaghebbend"},
+            {"id": "sage", "name": "Sage", "description": "Wys, gemete"},
+            {"id": "shimmer", "name": "Shimmer", "description": "Helder, vrolik"}
+        ]
+    }
+
+# ==================== OCR - LETTER EXTRACTION FROM IMAGES ====================
+
+@api_router.post("/ocr/extract-letters")
+async def extract_letters_from_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Extract letters/text from uploaded word card image using AI vision"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI API sleutel nie gekonfigureer nie")
+    
+    try:
+        # Read and encode the image
+        image_content = await file.read()
+        image_base64 = base64.b64encode(image_content).decode('utf-8')
+        
+        # Use GPT-4o vision to extract text
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"ocr_{uuid.uuid4()}",
+            system_message="Jy is 'n OCR assistent wat letters en woorde uit beelde moet uittrek. Antwoord slegs met die letters/woorde wat jy sien, niks anders nie."
+        ).with_model("openai", "gpt-4o")
+        
+        # Create message with image
+        image = ImageContent(image_base64=image_base64)
+        
+        user_message = UserMessage(
+            text="Kyk na hierdie woordkaart prent. Lys alle letters of woorde wat jy sien. Gee slegs die letters/woorde in kleinletters, geskei deur kommas. Byvoorbeeld: k, a, t of kat. As jy 'n woord sien, gee ook die individuele letters daarvan.",
+            images=[image]
+        )
+        
+        response = await chat.send_message(user_message)
+        
+        # Parse the response to extract letters
+        extracted_text = response.strip().lower()
+        
+        # Split by common delimiters and clean
+        letters = []
+        for part in extracted_text.replace('\n', ',').replace(' ', ',').split(','):
+            cleaned = part.strip()
+            if cleaned and len(cleaned) <= 10:  # Only keep short items (letters or short words)
+                if len(cleaned) == 1:
+                    letters.append(cleaned)
+                else:
+                    # It's a word, add the word and its individual letters
+                    for char in cleaned:
+                        if char.isalpha() and char not in letters:
+                            letters.append(char)
+        
+        # Remove duplicates while preserving order
+        unique_letters = list(dict.fromkeys(letters))
+        
+        return {
+            "extracted_text": extracted_text,
+            "letters": unique_letters,
+            "message": f"Letters geëkstraheer: {', '.join(unique_letters)}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OCR fout: {str(e)}")
 
 # Health Check
 @api_router.get("/")

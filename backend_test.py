@@ -96,7 +96,7 @@ class APITester:
             "POST",
             "auth/admin/login",
             200,  # Should succeed if admin credentials are set
-            data={"email": "admin@leesisduidelik.co.za", "password": "admin123"}
+            data={"email": "admin@leesisduidelik.co.za", "password": "1Lees2*#*"}
         )
         
         if success and 'access_token' in response:
@@ -685,6 +685,79 @@ class APITester:
         else:
             print("❌ Failed to create Klanktoets test for further testing")
 
+    def test_tts_demo_functionality(self):
+        """Test TTS (Text-to-Speech) Demo functionality (NEW FEATURE)"""
+        print("\n" + "="*50)
+        print("🎤 TESTING TTS DEMO (NEW FEATURE)")
+        print("="*50)
+        
+        if not self.admin_token:
+            print("❌ Admin authentication required for TTS demo tests")
+            return
+        
+        auth_headers = {'Authorization': f'Bearer {self.admin_token}'}
+        
+        # Test TTS demo endpoint
+        tts_data = {
+            "text": "Hallo, dit is 'n toets van die Afrikaanse TTS funksie.",
+            "voice": "alloy"  # Default voice
+        }
+        
+        success, response = self.run_test(
+            "TTS Demo Generation",
+            "POST",
+            "tts/demo",
+            200,
+            data=tts_data,
+            headers=auth_headers
+        )
+        
+        if success:
+            print("✅ TTS demo endpoint working")
+            if response.get('audio_url'):
+                print(f"✅ TTS audio generated: {response.get('audio_url')}")
+        else:
+            print("❌ TTS demo endpoint failed")
+
+    def test_woordbou_leaderboard_functionality(self):
+        """Test Woordbou leaderboard and stats functionality (NEW FEATURE)"""
+        print("\n" + "="*50)
+        print("🏆 TESTING WOORDBOU LEADERBOARD & STATS (NEW FEATURE)")
+        print("="*50)
+        
+        # Test leaderboard endpoint (requires authentication)
+        if self.admin_token:
+            auth_headers = {'Authorization': f'Bearer {self.admin_token}'}
+            success, response = self.run_test(
+                "Get Woordbou Leaderboard",
+                "GET",
+                "woordbou/leaderboard",
+                200,
+                headers=auth_headers
+            )
+            
+            if success:
+                print("✅ GET /api/woordbou/leaderboard endpoint working")
+                if response.get('leaderboard') is not None:
+                    print(f"✅ Leaderboard returned {len(response['leaderboard'])} entries")
+            else:
+                print("❌ Woordbou leaderboard endpoint failed")
+        else:
+            print("⚠️ Skipping leaderboard test - no admin token")
+        
+        # Test my-stats endpoint (requires learner auth, so test structure)
+        success, response = self.run_test(
+            "Get My Woordbou Stats (No Auth)",
+            "GET",
+            "woordbou/my-stats",
+            403  # Should require learner authentication
+        )
+        
+        if success:
+            print("✅ GET /api/woordbou/my-stats properly requires authentication")
+        else:
+            print("⚠️ Woordbou my-stats authentication check failed")
+
     def cleanup(self):
         """Clean up created test items"""
         if not self.admin_token:
@@ -744,6 +817,8 @@ def main():
         tester.test_school_edit_functionality()  # NEW FEATURE
         tester.test_woordbou_functionality()  # NEW FEATURE
         tester.test_klanktoets_functionality()  # NEW FEATURE
+        tester.test_tts_demo_functionality()  # NEW FEATURE - TTS Demo
+        tester.test_woordbou_leaderboard_functionality()  # NEW FEATURE - Woordbou Challenge
         
         return tester.print_summary()
         

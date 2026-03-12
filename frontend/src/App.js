@@ -11,7 +11,7 @@ import {
   CreditCard, Menu, ArrowLeft, Eye, EyeOff, Building2, Copy, Phone, Mail,
   MessageSquare, Send, Bell, ChevronDown, ChevronUp, ClipboardCopy, Loader,
   Folder, FolderOpen, RefreshCw, Calendar, FileBarChart, DollarSign, Package,
-  Download, Image
+  Download, Image, Sparkles, Trophy
 } from "lucide-react";
 import "@/index.css";
 
@@ -188,9 +188,12 @@ const LandingPage = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
-              <h1 className="font-heading text-4xl md:text-6xl font-bold text-text-primary mb-6">
-                Lees is <span className="text-primary-500">Duidelik</span>
-              </h1>
+              {/* Logo */}
+              <img 
+                src="/logo.png" 
+                alt="Lees is Duidelik" 
+                className="h-32 md:h-48 mx-auto mb-6 drop-shadow-lg"
+              />
               <p className="text-lg md:text-xl text-text-secondary max-w-2xl mx-auto mb-8">
                 Help jou kind om beter te lees met interaktiewe oefeninge in Afrikaans. 
                 Van begripstoetse tot hardoplees – ons maak lees pret!
@@ -362,7 +365,7 @@ const LandingPage = () => {
         {/* Footer */}
         <footer className="bg-gradient-to-r from-orange-700 via-amber-700 to-orange-800 text-white py-8">
           <div className="max-w-6xl mx-auto px-4 text-center">
-            <p className="font-heading text-xl mb-2">Lees is Duidelik</p>
+            <img src="/logo.png" alt="Lees is Duidelik" className="h-16 mx-auto mb-2 brightness-110" />
             <p className="text-orange-200">Gebou met liefde vir Suid-Afrikaanse leerders</p>
           </div>
         </footer>
@@ -2218,8 +2221,12 @@ const WoordbouExercisePage = ({ user }) => {
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState(null);
   const [startTime] = useState(Date.now());
+  const [myStats, setMyStats] = useState(null);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   useEffect(() => {
+    // Fetch exercises
     api.get("/woordbou")
       .then(res => {
         setExercises(res.data.exercises || []);
@@ -2234,6 +2241,10 @@ const WoordbouExercisePage = ({ user }) => {
         }
       })
       .finally(() => setLoading(false));
+    
+    // Fetch stats and leaderboard
+    api.get("/woordbou/my-stats").then(res => setMyStats(res.data)).catch(() => {});
+    api.get("/woordbou/leaderboard").then(res => setLeaderboard(res.data.leaderboard || [])).catch(() => {});
   }, [navigate]);
 
   const shuffleArray = (array) => {
@@ -2280,6 +2291,9 @@ const WoordbouExercisePage = ({ user }) => {
       setShowResult(true);
       if (res.data.correct) {
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        // Refresh stats after correct answer
+        api.get("/woordbou/my-stats").then(r => setMyStats(r.data)).catch(() => {});
+        api.get("/woordbou/leaderboard").then(r => setLeaderboard(r.data.leaderboard || [])).catch(() => {});
       }
     } catch (err) {
       toast.error("Kon nie antwoord indien nie");
@@ -2431,6 +2445,78 @@ const WoordbouExercisePage = ({ user }) => {
               </div>
             )}
           </Card>
+          
+          {/* Woordbou Challenge Stats */}
+          {myStats && (
+            <Card className="mb-4" testId="woordbou-stats">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                  <Trophy className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold">Woordbou Uitdaging</h3>
+                  <p className="text-xs text-text-muted">Kompeteer met ander leerders!</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-4 gap-2 mb-4">
+                <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-600">{myStats.correct_count}</p>
+                  <p className="text-xs text-text-muted">Korrek</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-orange-600">{myStats.streak}</p>
+                  <p className="text-xs text-text-muted">Streak</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-600">{myStats.accuracy}%</p>
+                  <p className="text-xs text-text-muted">Akkuraatheid</p>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-purple-600">#{myStats.rank || "-"}</p>
+                  <p className="text-xs text-text-muted">Rang</p>
+                </div>
+              </div>
+              
+              <Button 
+                variant="secondary" 
+                onClick={() => setShowLeaderboard(!showLeaderboard)} 
+                className="w-full"
+                testId="toggle-leaderboard"
+              >
+                <Trophy className="w-4 h-4 mr-2" />
+                {showLeaderboard ? "Verberg Ranglys" : "Wys Ranglys"}
+              </Button>
+              
+              {showLeaderboard && leaderboard.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <h4 className="font-semibold text-sm">Top 10 Woordbouers</h4>
+                  {leaderboard.map((entry, idx) => (
+                    <div 
+                      key={entry.learner_id}
+                      className={`flex items-center gap-3 p-2 rounded-lg ${
+                        entry.learner_id === user?.user_id ? "bg-amber-100 border border-amber-300" : "bg-slate-50"
+                      }`}
+                    >
+                      <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                        idx === 0 ? "bg-yellow-400 text-yellow-900" :
+                        idx === 1 ? "bg-gray-300 text-gray-700" :
+                        idx === 2 ? "bg-orange-300 text-orange-800" :
+                        "bg-slate-200 text-slate-600"
+                      }`}>
+                        {entry.rank}
+                      </span>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{entry.name}</p>
+                        {entry.school && <p className="text-xs text-text-muted">{entry.school}</p>}
+                      </div>
+                      <span className="font-bold text-emerald-600">{entry.correct_count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
         </div>
       </div>
     </PageTransition>
@@ -4657,6 +4743,8 @@ const AdminDashboard = ({ onLogout }) => {
   const [newWoordbou, setNewWoordbou] = useState({ title: "", grade_level: 1, term: 1, target_word: "", available_letters: "" });
   const [newKlanktoets, setNewKlanktoets] = useState({ title: "", grade_level: 1, term: 1, test_type: "audio_to_text", items: [] });
   const [siteSettings, setSiteSettings] = useState({ logo_url: null, about_title: "Lees is Duidelik", about_text: "", contact_email: "", contact_phone: "" });
+  const [ttsDemo, setTtsDemo] = useState({ text: "Hallo! Hierdie is 'n toets van die Afrikaanse teks-na-spraak funksie. Luister hoe dit klink.", voice: "nova", audioUrl: null, loading: false });
+  const [ttsVoices, setTtsVoices] = useState([]);
   const [savingSettings, setSavingSettings] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: "", new: "", confirm: "" });
   const [pendingPayments, setPendingPayments] = useState([]);
@@ -4720,6 +4808,8 @@ Geniet die toets.`
       if (instructionsRes.data) setExerciseInstructions(prev => ({ ...prev, ...instructionsRes.data }));
       setWoordbouList(woordbouRes.data.exercises || []);
       setKlanktoetsList(klanktoetsRes.data.exercises || []);
+      // Fetch TTS voices
+      api.get("/tts/voices").then(res => setTtsVoices(res.data.voices || [])).catch(() => {});
     })
     .catch(err => {
       console.error("Error loading admin data:", err);
@@ -5938,6 +6028,44 @@ Geniet die toets.`
                     testId="woordbou-letters"
                   />
                 </div>
+                
+                {/* OCR Extraction */}
+                <div className="bg-primary-50 rounded-xl p-4 mt-4">
+                  <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary-500" />
+                    Outomatiese Letter-Ekstrasie van Prent
+                  </p>
+                  <p className="text-xs text-text-muted mb-3">
+                    Laai 'n woordkaart prent op en ons sal die letters outomaties uittrek.
+                  </p>
+                  <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-white border border-primary-300 text-primary-700 rounded-lg hover:bg-primary-100">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          toast.info("Ekstraheer letters...");
+                          const formData = new FormData();
+                          formData.append("file", file);
+                          try {
+                            const res = await api.post("/ocr/extract-letters", formData);
+                            const letters = res.data.letters.join(", ");
+                            setNewWoordbou({...newWoordbou, available_letters: letters});
+                            toast.success(res.data.message);
+                          } catch (err) {
+                            toast.error(err.response?.data?.detail || "Kon nie letters ekstraheer nie");
+                          }
+                        }
+                      }}
+                      data-testid="ocr-extract-input"
+                    />
+                    <Image className="w-4 h-4" />
+                    Laai Prent Op vir OCR
+                  </label>
+                </div>
+                
                 <p className="text-xs text-text-muted mt-2">
                   Voeg ekstra letters by om dit moeiliker te maak. Die leerder moet die korrekte letters kies en sleep om die woord te bou.
                 </p>
@@ -6417,6 +6545,92 @@ Geniet die toets.`
                     </Button>
                     <p className="text-sm text-text-muted mt-2">PNG, JPG of SVG. Maksimum 2MB.</p>
                   </div>
+                </div>
+              </Card>
+
+              {/* TTS Demo Card */}
+              <Card testId="settings-tts-demo">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-secondary-100 rounded-xl flex items-center justify-center">
+                    <Volume2 className="w-5 h-5 text-secondary-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-bold">AI Afrikaans TTS Demo</h3>
+                    <p className="text-sm text-text-muted">Luister hoe AI Afrikaans klink</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Teks om te lees</label>
+                    <textarea
+                      className="input-field min-h-[100px]"
+                      value={ttsDemo.text}
+                      onChange={(e) => setTtsDemo({...ttsDemo, text: e.target.value})}
+                      placeholder="Tik Afrikaanse teks hier..."
+                      data-testid="tts-demo-text"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Stem</label>
+                    <select
+                      className="input-field"
+                      value={ttsDemo.voice}
+                      onChange={(e) => setTtsDemo({...ttsDemo, voice: e.target.value})}
+                      data-testid="tts-demo-voice"
+                    >
+                      {ttsVoices.map(v => (
+                        <option key={v.id} value={v.id}>{v.name} - {v.description}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={async () => {
+                        if (!ttsDemo.text.trim()) {
+                          toast.error("Voer eers teks in");
+                          return;
+                        }
+                        setTtsDemo({...ttsDemo, loading: true, audioUrl: null});
+                        try {
+                          const res = await api.post("/tts/demo", {
+                            text: ttsDemo.text,
+                            voice: ttsDemo.voice
+                          });
+                          setTtsDemo({...ttsDemo, loading: false, audioUrl: res.data.audio_url});
+                          toast.success("TTS audio gegenereer!");
+                        } catch (err) {
+                          setTtsDemo({...ttsDemo, loading: false});
+                          toast.error(err.response?.data?.detail || "TTS fout");
+                        }
+                      }}
+                      disabled={ttsDemo.loading || !ttsDemo.text.trim()}
+                      testId="tts-demo-generate"
+                    >
+                      {ttsDemo.loading ? (
+                        <><Loader className="w-4 h-4 mr-2 animate-spin" /> Genereer...</>
+                      ) : (
+                        <><Volume2 className="w-4 h-4 mr-2" /> Genereer Audio</>
+                      )}
+                    </Button>
+                  </div>
+
+                  {ttsDemo.audioUrl && (
+                    <div className="bg-secondary-50 rounded-xl p-4">
+                      <p className="text-sm font-semibold mb-2">Luister na die resultaat:</p>
+                      <audio 
+                        controls 
+                        src={`${BACKEND_URL}${ttsDemo.audioUrl}`} 
+                        className="w-full"
+                        data-testid="tts-demo-audio"
+                      />
+                      <p className="text-xs text-text-muted mt-2">
+                        Stem: {ttsVoices.find(v => v.id === ttsDemo.voice)?.name || ttsDemo.voice}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </Card>
 
