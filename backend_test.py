@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 class APITester:
-    def __init__(self, base_url="https://lees-preview-build.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://app-shutdown-7.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.admin_token = None
         self.learner_token = None
@@ -96,7 +96,7 @@ class APITester:
             "POST",
             "auth/admin/login",
             200,  # Should succeed if admin credentials are set
-            data={"email": "admin@leesisduidelik.com", "password": "admin123"}
+            data={"email": "admin@leesisduidelik.co.za", "password": "admin123"}
         )
         
         if success and 'access_token' in response:
@@ -403,6 +403,288 @@ class APITester:
         print("✅ Weekly progress email endpoint structure verified (NEW FEATURE)")
         print("   Note: Requires parent login (password only, no OTP) and email address")
 
+    def test_school_edit_functionality(self):
+        """Test school edit functionality"""
+        print("\n" + "="*50)
+        print("🏫 TESTING SCHOOL EDIT FUNCTIONALITY (NEW FEATURE)")
+        print("="*50)
+        
+        if not self.admin_token:
+            print("❌ Admin authentication required for school tests")
+            return
+        
+        auth_headers = {'Authorization': f'Bearer {self.admin_token}'}
+        
+        # First, get list of schools to edit
+        success, schools_response = self.run_test(
+            "Get Schools List",
+            "GET",
+            "schools",
+            200,
+            headers=auth_headers
+        )
+        
+        if success and schools_response:
+            if len(schools_response) > 0:
+                # Test editing the first school
+                school = schools_response[0]
+                school_id = school.get('id')
+                
+                if school_id:
+                    # Test school update (PUT /api/schools/{id})
+                    update_data = {
+                        "school_name": "Updated Test School Name",
+                        "contact_person": "Updated Contact Person",
+                        "contact_email": "updated@test.com",
+                        "contact_whatsapp": "0821234567",
+                        "contact_phone": "0121234567",
+                        "learner_count": 150,
+                        "status": "approved"
+                    }
+                    
+                    success, update_response = self.run_test(
+                        "Update School Information",
+                        "PUT",
+                        f"schools/{school_id}",
+                        200,
+                        data=update_data,
+                        headers=auth_headers
+                    )
+                    
+                    if success:
+                        print("✅ School edit functionality working (PUT /api/schools/{id})")
+                    else:
+                        print("❌ School edit functionality failed")
+                else:
+                    print("⚠️ No school ID found to test edit functionality")
+            else:
+                print("⚠️ No schools found to test edit functionality")
+                
+                # Create a test school to edit
+                test_school_data = {
+                    "school_name": "Test School for Edit",
+                    "contact_person": "Test Contact",
+                    "contact_email": "test@testschool.com",
+                    "contact_whatsapp": "0821234567",
+                    "learner_count": 100
+                }
+                
+                success, create_response = self.run_test(
+                    "Create Test School",
+                    "POST",
+                    "schools/register",
+                    200,
+                    data=test_school_data
+                )
+                
+                if success and create_response.get('id'):
+                    school_id = create_response['id']
+                    
+                    # Test editing the created school
+                    update_data = {
+                        "school_name": "Updated Test School",
+                        "contact_person": "Updated Contact",
+                        "status": "approved"
+                    }
+                    
+                    success, update_response = self.run_test(
+                        "Update Test School",
+                        "PUT",
+                        f"schools/{school_id}",
+                        200,
+                        data=update_data,
+                        headers=auth_headers
+                    )
+                    
+                    if success:
+                        print("✅ School edit functionality working with created school")
+        else:
+            print("❌ Could not retrieve schools list to test edit functionality")
+
+    def test_woordbou_functionality(self):
+        """Test Woordbou (Word Building) CRUD operations"""
+        print("\n" + "="*50)
+        print("📝 TESTING WOORDBOU (WORD BUILDING) CRUD (NEW FEATURE)")
+        print("="*50)
+        
+        if not self.admin_token:
+            print("❌ Admin authentication required for Woordbou tests")
+            return
+        
+        auth_headers = {'Authorization': f'Bearer {self.admin_token}'}
+        
+        # Test GET /api/woordbou (list exercises)
+        success, list_response = self.run_test(
+            "Get Woordbou Exercises List",
+            "GET",
+            "woordbou",
+            200,
+            headers=auth_headers
+        )
+        
+        if success:
+            print("✅ GET /api/woordbou endpoint working")
+        
+        # Test POST /api/woordbou (create exercise)
+        woordbou_data = {
+            "title": "Test Word Building Exercise",
+            "grade_level": 2,
+            "term": 1,
+            "target_word": "kat",
+            "available_letters": ["k", "a", "t", "o", "m", "s"],
+            "image_url": None
+        }
+        
+        success, create_response = self.run_test(
+            "Create Woordbou Exercise",
+            "POST",
+            "woordbou",
+            200,
+            data=woordbou_data,
+            headers=auth_headers
+        )
+        
+        woordbou_id = None
+        if success and create_response.get('id'):
+            woordbou_id = create_response['id']
+            self.created_items.append(('woordbou', woordbou_id))
+            print("✅ POST /api/woordbou endpoint working")
+            
+            # Test GET /api/woordbou/{id} (get specific exercise)
+            success, get_response = self.run_test(
+                "Get Specific Woordbou Exercise",
+                "GET",
+                f"woordbou/{woordbou_id}",
+                200,
+                headers=auth_headers
+            )
+            
+            if success:
+                print("✅ GET /api/woordbou/{id} endpoint working")
+            
+            # Test PUT /api/woordbou/{id} (update exercise)
+            update_data = {
+                "title": "Updated Word Building Exercise",
+                "grade_level": 3,
+                "term": 2,
+                "target_word": "hond",
+                "available_letters": ["h", "o", "n", "d", "a", "t"]
+            }
+            
+            success, update_response = self.run_test(
+                "Update Woordbou Exercise",
+                "PUT",
+                f"woordbou/{woordbou_id}",
+                200,
+                data=update_data,
+                headers=auth_headers
+            )
+            
+            if success:
+                print("✅ PUT /api/woordbou/{id} endpoint working")
+        else:
+            print("❌ Failed to create Woordbou exercise for further testing")
+
+    def test_klanktoets_functionality(self):
+        """Test Klanktoets (Sound Test) CRUD operations"""
+        print("\n" + "="*50)
+        print("🔊 TESTING KLANKTOETS (SOUND TEST) CRUD (NEW FEATURE)")
+        print("="*50)
+        
+        if not self.admin_token:
+            print("❌ Admin authentication required for Klanktoets tests")
+            return
+        
+        auth_headers = {'Authorization': f'Bearer {self.admin_token}'}
+        
+        # Test GET /api/klanktoets (list tests)
+        success, list_response = self.run_test(
+            "Get Klanktoets Tests List",
+            "GET",
+            "klanktoets",
+            200,
+            headers=auth_headers
+        )
+        
+        if success:
+            print("✅ GET /api/klanktoets endpoint working")
+        
+        # Test POST /api/klanktoets (create test)
+        klanktoets_data = {
+            "title": "Test Sound Test",
+            "grade_level": 1,
+            "term": 1,
+            "test_type": "audio_to_text",
+            "items": [
+                {
+                    "audio_url": None,
+                    "correct_answer": "kat",
+                    "points": 1
+                },
+                {
+                    "audio_url": None, 
+                    "correct_answer": "hond",
+                    "points": 1
+                }
+            ]
+        }
+        
+        success, create_response = self.run_test(
+            "Create Klanktoets Test",
+            "POST",
+            "klanktoets",
+            200,
+            data=klanktoets_data,
+            headers=auth_headers
+        )
+        
+        klanktoets_id = None
+        if success and create_response.get('id'):
+            klanktoets_id = create_response['id']
+            self.created_items.append(('klanktoets', klanktoets_id))
+            print("✅ POST /api/klanktoets endpoint working")
+            
+            # Test GET /api/klanktoets/{id} (get specific test)
+            success, get_response = self.run_test(
+                "Get Specific Klanktoets Test",
+                "GET",
+                f"klanktoets/{klanktoets_id}",
+                200,
+                headers=auth_headers
+            )
+            
+            if success:
+                print("✅ GET /api/klanktoets/{id} endpoint working")
+            
+            # Test PUT /api/klanktoets/{id} (update test)
+            update_data = {
+                "title": "Updated Sound Test",
+                "grade_level": 2,
+                "term": 2,
+                "test_type": "image_to_text",
+                "items": [
+                    {
+                        "image_url": None,
+                        "correct_answer": "boom",
+                        "points": 1
+                    }
+                ]
+            }
+            
+            success, update_response = self.run_test(
+                "Update Klanktoets Test",
+                "PUT",
+                f"klanktoets/{klanktoets_id}",
+                200,
+                data=update_data,
+                headers=auth_headers
+            )
+            
+            if success:
+                print("✅ PUT /api/klanktoets/{id} endpoint working")
+        else:
+            print("❌ Failed to create Klanktoets test for further testing")
+
     def cleanup(self):
         """Clean up created test items"""
         if not self.admin_token:
@@ -416,6 +698,12 @@ class APITester:
                 if item_type == 'text':
                     requests.delete(f"{self.base_url}/texts/{item_id}", headers=auth_headers, timeout=10)
                     print(f"   Deleted text {item_id}")
+                elif item_type == 'woordbou':
+                    requests.delete(f"{self.base_url}/woordbou/{item_id}", headers=auth_headers, timeout=10)
+                    print(f"   Deleted woordbou {item_id}")
+                elif item_type == 'klanktoets':
+                    requests.delete(f"{self.base_url}/klanktoets/{item_id}", headers=auth_headers, timeout=10)
+                    print(f"   Deleted klanktoets {item_id}")
             except Exception as e:
                 print(f"   Failed to delete {item_type} {item_id}: {e}")
 
@@ -438,7 +726,7 @@ class APITester:
 
 def main():
     print("🚀 Starting Lees is Duidelik API Testing")
-    print(f"🌐 Backend URL: https://lees-preview-build.preview.emergentagent.com/api")
+    print(f"🌐 Backend URL: https://app-shutdown-7.preview.emergentagent.com/api")
     print(f"🕒 Test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     tester = APITester()
@@ -453,6 +741,9 @@ def main():
         tester.test_invitation_codes()
         tester.test_exercise_submission_keyword_matching()  # NEW FEATURE
         tester.test_weekly_progress_email()  # NEW FEATURE
+        tester.test_school_edit_functionality()  # NEW FEATURE
+        tester.test_woordbou_functionality()  # NEW FEATURE
+        tester.test_klanktoets_functionality()  # NEW FEATURE
         
         return tester.print_summary()
         

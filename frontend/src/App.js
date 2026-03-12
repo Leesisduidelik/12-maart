@@ -1460,11 +1460,19 @@ const LearnerDashboard = ({ user, onLogout }) => {
       .finally(() => setLoading(false));
   }, []);
 
+  const learnerGrade = user?.current_reading_level || user?.grade || 1;
+  const isGrade1to3 = learnerGrade <= 3;
+  
   const exerciseTypes = [
     { id: "comprehension", icon: BookOpen, title: "Begrip", desc: "Lees en beantwoord vrae", color: "bg-primary-500" },
     { id: "reading", icon: Mic, title: "Hardoplees", desc: "Neem jouself op", color: "bg-accent-500" },
     { id: "listening", icon: Headphones, title: "Luister", desc: "Luister en leer", color: "bg-secondary-500" },
     { id: "spelling", icon: Edit3, title: "Spelling", desc: "Oefen jou spelling", color: "bg-purple-500" },
+    // Grade 1-3 specific exercises
+    ...(isGrade1to3 ? [
+      { id: "woordbou", icon: BookOpen, title: "Woordbou", desc: "Bou woorde met letters", color: "bg-emerald-500" },
+      { id: "klanktoets", icon: Volume2, title: "Klanktoets", desc: "Luister en skryf klanke", color: "bg-orange-500" },
+    ] : []),
   ];
 
   if (loading) {
@@ -1568,7 +1576,15 @@ const LearnerDashboard = ({ user, onLogout }) => {
               <Card
                 key={ex.id}
                 className="cursor-pointer"
-                onClick={() => navigate(`/exercise/${ex.id}`)}
+                onClick={() => {
+                  if (ex.id === "woordbou") {
+                    navigate("/woordbou");
+                  } else if (ex.id === "klanktoets") {
+                    navigate("/klanktoets");
+                  } else {
+                    navigate(`/exercise/${ex.id}`);
+                  }
+                }}
                 testId={`exercise-${ex.id}`}
               >
                 <div className={`w-12 h-12 ${ex.color} rounded-xl flex items-center justify-center mb-3`}>
@@ -2185,6 +2201,444 @@ const ExercisePage = ({ user }) => {
               )}
             </Card>
           )}
+        </div>
+      </div>
+    </PageTransition>
+  );
+};
+
+// Woordbou Exercise Page - Drag and drop letters to build words (Grade 1-3)
+const WoordbouExercisePage = ({ user }) => {
+  const navigate = useNavigate();
+  const [exercises, setExercises] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [builtWord, setBuiltWord] = useState([]);
+  const [availableLetters, setAvailableLetters] = useState([]);
+  const [showResult, setShowResult] = useState(false);
+  const [result, setResult] = useState(null);
+  const [startTime] = useState(Date.now());
+
+  useEffect(() => {
+    api.get("/woordbou")
+      .then(res => {
+        setExercises(res.data.exercises || []);
+        if (res.data.exercises?.length > 0) {
+          setAvailableLetters(shuffleArray([...res.data.exercises[0].available_letters]));
+        }
+      })
+      .catch(err => {
+        if (err.response?.status === 402) {
+          toast.error("Subskripsie vereis");
+          navigate("/subscription");
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [navigate]);
+
+  const shuffleArray = (array) => {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
+  const currentExercise = exercises[currentIndex];
+
+  const handleLetterClick = (letter, index) => {
+    // Add letter to built word
+    setBuiltWord([...builtWord, letter]);
+    // Remove from available
+    const newAvailable = [...availableLetters];
+    newAvailable.splice(index, 1);
+    setAvailableLetters(newAvailable);
+  };
+
+  const handleRemoveLetter = (index) => {
+    // Remove from built word
+    const letter = builtWord[index];
+    const newBuilt = [...builtWord];
+    newBuilt.splice(index, 1);
+    setBuiltWord(newBuilt);
+    // Add back to available
+    setAvailableLetters([...availableLetters, letter]);
+  };
+
+  const handleSubmit = async () => {
+    if (!currentExercise) return;
+    
+    const timeSeconds = (Date.now() - startTime) / 1000;
+    try {
+      const res = await api.post("/woordbou/submit", {
+        woordbou_id: currentExercise.id,
+        built_word: builtWord.join(""),
+        time_seconds: timeSeconds
+      });
+      setResult(res.data);
+      setShowResult(true);
+      if (res.data.correct) {
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+      }
+    } catch (err) {
+      toast.error("Kon nie antwoord indien nie");
+    }
+  };
+
+  const handleNext = () => {
+    if (currentIndex < exercises.length - 1) {
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      setBuiltWord([]);
+      setAvailableLetters(shuffleArray([...exercises[nextIndex].available_letters]));
+      setShowResult(false);
+      setResult(null);
+    } else {
+      navigate("/dashboard");
+      toast.success("Alle woordbou oefeninge voltooi!");
+    }
+  };
+
+  const handleReset = () => {
+    setBuiltWord([]);
+    setAvailableLetters(shuffleArray([...currentExercise.available_letters]));
+  };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center"><Loader className="w-8 h-8 animate-spin" /></div>;
+  }
+
+  if (exercises.length === 0) {
+    return (
+      <PageTransition>
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <Card className="text-center">
+            <BookOpen className="w-12 h-12 text-primary-500 mx-auto mb-4" />
+            <h2 className="font-heading text-xl font-bold mb-2">Geen Woordbou Oefeninge</h2>
+            <p className="text-text-muted mb-4">Daar is tans geen oefeninge vir jou graad nie.</p>
+            <Button onClick={() => navigate("/dashboard")} testId="back-dashboard">Terug na Dashboard</Button>
+          </Card>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  return (
+    <PageTransition>
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 p-4">
+        <div className="max-w-2xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => navigate("/dashboard")} className="flex items-center gap-2 text-text-muted hover:text-text-primary">
+              <ArrowLeft className="w-5 h-5" /> Terug
+            </button>
+            <span className="text-sm font-medium bg-white px-3 py-1 rounded-full">
+              {currentIndex + 1} / {exercises.length}
+            </span>
+          </div>
+
+          <Card className="mb-6" testId="woordbou-exercise">
+            <h2 className="font-heading text-xl font-bold text-center mb-4">{currentExercise?.title}</h2>
+            
+            {/* Image if available */}
+            {currentExercise?.image_url && (
+              <div className="flex justify-center mb-6">
+                <img 
+                  src={`${BACKEND_URL}${currentExercise.image_url}`} 
+                  alt="Woordkaart" 
+                  className="max-w-xs rounded-xl border-4 border-emerald-200 shadow-lg"
+                />
+              </div>
+            )}
+
+            {/* Built word area */}
+            <div className="bg-emerald-50 rounded-xl p-6 mb-6 min-h-[80px]">
+              <p className="text-xs text-text-muted mb-2 text-center">Jou woord:</p>
+              <div className="flex justify-center gap-2 flex-wrap">
+                {builtWord.length === 0 ? (
+                  <span className="text-text-muted">Tik op letters hieronder om te begin bou</span>
+                ) : (
+                  builtWord.map((letter, idx) => (
+                    <motion.button
+                      key={idx}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      onClick={() => handleRemoveLetter(idx)}
+                      className="w-14 h-14 bg-emerald-500 text-white text-2xl font-bold rounded-xl shadow-md hover:bg-emerald-400 transition-colors flex items-center justify-center uppercase"
+                      whileTap={{ scale: 0.9 }}
+                      data-testid={`built-letter-${idx}`}
+                    >
+                      {letter}
+                    </motion.button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Available letters */}
+            <div className="mb-6">
+              <p className="text-xs text-text-muted mb-2 text-center">Beskikbare letters (tik om by te voeg):</p>
+              <div className="flex justify-center gap-3 flex-wrap">
+                {availableLetters.map((letter, idx) => (
+                  <motion.button
+                    key={idx}
+                    onClick={() => handleLetterClick(letter, idx)}
+                    className="w-14 h-14 bg-white border-2 border-emerald-300 text-emerald-700 text-2xl font-bold rounded-xl shadow hover:bg-emerald-100 transition-colors flex items-center justify-center uppercase"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    data-testid={`available-letter-${idx}`}
+                  >
+                    {letter}
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            {!showResult ? (
+              <div className="flex gap-3">
+                <Button variant="secondary" onClick={handleReset} testId="reset-woordbou" className="flex-1">
+                  Begin Oor
+                </Button>
+                <Button 
+                  onClick={handleSubmit} 
+                  disabled={builtWord.length === 0}
+                  testId="submit-woordbou"
+                  className="flex-1"
+                >
+                  Kyk of ek reg is!
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center">
+                {result?.correct ? (
+                  <div className="bg-green-100 rounded-xl p-6 mb-4">
+                    <Check className="w-16 h-16 text-green-500 mx-auto mb-2" />
+                    <h3 className="font-heading text-2xl font-bold text-green-700">Uitstekend!</h3>
+                    <p className="text-green-600">{result.message}</p>
+                  </div>
+                ) : (
+                  <div className="bg-orange-100 rounded-xl p-6 mb-4">
+                    <X className="w-16 h-16 text-orange-500 mx-auto mb-2" />
+                    <h3 className="font-heading text-xl font-bold text-orange-700">Probeer Weer!</h3>
+                    <p className="text-orange-600">{result?.message}</p>
+                  </div>
+                )}
+                <Button onClick={handleNext} testId="next-woordbou" className="w-full">
+                  {currentIndex < exercises.length - 1 ? "Volgende Woord" : "Klaar!"}
+                </Button>
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+    </PageTransition>
+  );
+};
+
+// Klanktoets Exercise Page - Listen/Look and spell (Grade 1-3)
+const KlanktoetsExercisePage = ({ user }) => {
+  const navigate = useNavigate();
+  const [exercises, setExercises] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [answers, setAnswers] = useState([]);
+  const [showResult, setShowResult] = useState(false);
+  const [result, setResult] = useState(null);
+  const [startTime] = useState(Date.now());
+
+  useEffect(() => {
+    api.get("/klanktoets")
+      .then(res => {
+        setExercises(res.data.exercises || []);
+        if (res.data.exercises?.[0]) {
+          setAnswers(new Array(res.data.exercises[0].items?.length || 0).fill(""));
+        }
+      })
+      .catch(err => {
+        if (err.response?.status === 402) {
+          toast.error("Subskripsie vereis");
+          navigate("/subscription");
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [navigate]);
+
+  const currentExercise = exercises[currentIndex];
+
+  const handleSubmit = async () => {
+    if (!currentExercise) return;
+    
+    const timeSeconds = (Date.now() - startTime) / 1000;
+    try {
+      const res = await api.post("/klanktoets/submit", {
+        klanktoets_id: currentExercise.id,
+        answers: answers,
+        time_seconds: timeSeconds
+      });
+      setResult(res.data);
+      setShowResult(true);
+      if (res.data.score >= 80) {
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+      }
+    } catch (err) {
+      toast.error("Kon nie antwoord indien nie");
+    }
+  };
+
+  const handleNext = () => {
+    if (currentIndex < exercises.length - 1) {
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      setAnswers(new Array(exercises[nextIndex].items?.length || 0).fill(""));
+      setShowResult(false);
+      setResult(null);
+    } else {
+      navigate("/dashboard");
+      toast.success("Alle klanktoetse voltooi!");
+    }
+  };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center"><Loader className="w-8 h-8 animate-spin" /></div>;
+  }
+
+  if (exercises.length === 0) {
+    return (
+      <PageTransition>
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <Card className="text-center">
+            <Volume2 className="w-12 h-12 text-orange-500 mx-auto mb-4" />
+            <h2 className="font-heading text-xl font-bold mb-2">Geen Klanktoetse</h2>
+            <p className="text-text-muted mb-4">Daar is tans geen toetse vir jou graad nie.</p>
+            <Button onClick={() => navigate("/dashboard")} testId="back-dashboard">Terug na Dashboard</Button>
+          </Card>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  return (
+    <PageTransition>
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-4">
+        <div className="max-w-2xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => navigate("/dashboard")} className="flex items-center gap-2 text-text-muted hover:text-text-primary">
+              <ArrowLeft className="w-5 h-5" /> Terug
+            </button>
+            <span className="text-sm font-medium bg-white px-3 py-1 rounded-full">
+              Toets {currentIndex + 1} / {exercises.length}
+            </span>
+          </div>
+
+          <Card className="mb-6" testId="klanktoets-exercise">
+            <h2 className="font-heading text-xl font-bold text-center mb-2">{currentExercise?.title}</h2>
+            <p className="text-center text-text-muted mb-6">
+              {currentExercise?.test_type === "audio_to_text" 
+                ? "Luister na elke klank en skryf die woord" 
+                : "Kyk na elke prent en skryf die woord"}
+            </p>
+
+            {!showResult ? (
+              <div className="space-y-4">
+                {currentExercise?.items?.map((item, idx) => (
+                  <div key={item.id || idx} className="bg-orange-50 rounded-xl p-4">
+                    <div className="flex items-center gap-4 mb-3">
+                      <span className="w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center font-bold">
+                        {idx + 1}
+                      </span>
+                      
+                      {currentExercise.test_type === "audio_to_text" ? (
+                        item.audio_url ? (
+                          <audio 
+                            controls 
+                            src={`${BACKEND_URL}${item.audio_url}`} 
+                            className="flex-1 h-10"
+                          />
+                        ) : (
+                          <span className="text-text-muted flex-1">Geen oudio opgelaai nie</span>
+                        )
+                      ) : (
+                        item.image_url ? (
+                          <img 
+                            src={`${BACKEND_URL}${item.image_url}`} 
+                            alt={`Item ${idx + 1}`} 
+                            className="w-24 h-24 object-cover rounded-lg border-2 border-orange-200"
+                          />
+                        ) : (
+                          <span className="text-text-muted flex-1">Geen prent opgelaai nie</span>
+                        )
+                      )}
+                    </div>
+                    
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="Skryf die woord hier..."
+                      value={answers[idx] || ""}
+                      onChange={(e) => {
+                        const newAnswers = [...answers];
+                        newAnswers[idx] = e.target.value.toLowerCase();
+                        setAnswers(newAnswers);
+                      }}
+                      data-testid={`klank-answer-${idx}`}
+                    />
+                  </div>
+                ))}
+
+                <Button 
+                  onClick={handleSubmit} 
+                  className="w-full mt-6"
+                  disabled={answers.every(a => !a)}
+                  testId="submit-klanktoets"
+                >
+                  Dien In
+                </Button>
+              </div>
+            ) : (
+              <div>
+                {/* Score display */}
+                <div className={`text-center rounded-xl p-6 mb-6 ${
+                  result.score >= 80 ? "bg-green-100" : result.score >= 50 ? "bg-yellow-100" : "bg-orange-100"
+                }`}>
+                  <div className="text-4xl font-bold mb-2">
+                    {result.correct_count} / {result.total_points}
+                  </div>
+                  <p className="text-lg font-semibold">{result.message}</p>
+                </div>
+
+                {/* Show graded answers */}
+                <div className="space-y-3 mb-6">
+                  {result.graded_answers?.map((ga, idx) => (
+                    <div key={idx} className={`flex items-center gap-3 p-3 rounded-lg ${
+                      ga.is_correct ? "bg-green-50" : "bg-red-50"
+                    }`}>
+                      <span className="font-bold">{idx + 1}.</span>
+                      {ga.is_correct ? (
+                        <Check className="w-5 h-5 text-green-500" />
+                      ) : (
+                        <X className="w-5 h-5 text-red-500" />
+                      )}
+                      <span className="flex-1">
+                        Jou antwoord: <strong>{ga.user_answer || "(leeg)"}</strong>
+                        {!ga.is_correct && (
+                          <span className="text-text-muted ml-2">
+                            → Korrek: <strong className="text-green-600">{ga.correct_answer}</strong>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <Button onClick={handleNext} testId="next-klanktoets" className="w-full">
+                  {currentIndex < exercises.length - 1 ? "Volgende Toets" : "Klaar!"}
+                </Button>
+              </div>
+            )}
+          </Card>
         </div>
       </div>
     </PageTransition>
@@ -4196,6 +4650,12 @@ const AdminDashboard = ({ onLogout }) => {
   const [inviteNote, setInviteNote] = useState("");
   const [schoolCodeForm, setSchoolCodeForm] = useState({ school_id: "", max_uses: 100, note: "" });
   const [newSchoolForm, setNewSchoolForm] = useState({ school_name: "", contact_person: "", contact_email: "", contact_whatsapp: "", max_learners: 100 });
+  const [editingSchool, setEditingSchool] = useState(null);
+  const [editSchoolForm, setEditSchoolForm] = useState({});
+  const [woordbouList, setWoordbouList] = useState([]);
+  const [klanktoetsList, setKlanktoetsList] = useState([]);
+  const [newWoordbou, setNewWoordbou] = useState({ title: "", grade_level: 1, term: 1, target_word: "", available_letters: "" });
+  const [newKlanktoets, setNewKlanktoets] = useState({ title: "", grade_level: 1, term: 1, test_type: "audio_to_text", items: [] });
   const [siteSettings, setSiteSettings] = useState({ logo_url: null, about_title: "Lees is Duidelik", about_text: "", contact_email: "", contact_phone: "" });
   const [savingSettings, setSavingSettings] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: "", new: "", confirm: "" });
@@ -4242,9 +4702,11 @@ Geniet die toets.`
       api.get("/payments/eft/all").catch(() => ({ data: { payments: [] } })),
       api.get("/payments/bank-details").catch(() => ({ data: bankDetails })),
       api.get("/admin/tutoring/requests").catch(() => ({ data: { requests: [] } })),
-      api.get("/exercise-instructions").catch(() => ({ data: exerciseInstructions }))
+      api.get("/exercise-instructions").catch(() => ({ data: exerciseInstructions })),
+      api.get("/woordbou").catch(() => ({ data: { exercises: [] } })),
+      api.get("/klanktoets").catch(() => ({ data: { exercises: [] } }))
     ])
-    .then(([learnersRes, textsRes, invitesRes, schoolsRes, schoolCodesRes, settingsRes, pendingRes, allPaymentsRes, bankRes, tutoringRes, instructionsRes]) => {
+    .then(([learnersRes, textsRes, invitesRes, schoolsRes, schoolCodesRes, settingsRes, pendingRes, allPaymentsRes, bankRes, tutoringRes, instructionsRes, woordbouRes, klanktoetsRes]) => {
       setLearners(learnersRes.data);
       setTexts(textsRes.data);
       setInvitations(invitesRes.data);
@@ -4256,6 +4718,8 @@ Geniet die toets.`
       if (bankRes.data) setBankDetails(prev => ({ ...prev, ...bankRes.data }));
       setTutoringRequests(tutoringRes.data.requests || []);
       if (instructionsRes.data) setExerciseInstructions(prev => ({ ...prev, ...instructionsRes.data }));
+      setWoordbouList(woordbouRes.data.exercises || []);
+      setKlanktoetsList(klanktoetsRes.data.exercises || []);
     })
     .catch(err => {
       console.error("Error loading admin data:", err);
@@ -4385,6 +4849,8 @@ Geniet die toets.`
                 { id: "learners", icon: Users, label: "Leerders" },
                 { id: "tutoring", icon: Phone, label: "Tutoring" },
                 { id: "texts", icon: FileText, label: "Tekste" },
+                { id: "woordbou", icon: BookOpen, label: "Woordbou" },
+                { id: "klanktoets", icon: Volume2, label: "Klanktoets" },
                 { id: "generate", icon: Star, label: "Genereer" },
                 { id: "settings", icon: Settings, label: "Instellings" },
               ].map(tab => (
@@ -4891,6 +5357,27 @@ Geniet die toets.`
                                 Betaal
                               </span>
                             )}
+                            <button
+                              onClick={() => {
+                                setEditingSchool(school);
+                                setEditSchoolForm({
+                                  school_name: school.school_name || "",
+                                  contact_person: school.contact_person || "",
+                                  contact_email: school.contact_email || "",
+                                  contact_whatsapp: school.contact_whatsapp || "",
+                                  contact_phone: school.contact_phone || "",
+                                  principal_contact: school.principal_contact || "",
+                                  school_email: school.school_email || "",
+                                  learner_count: school.learner_count || 10,
+                                  status: school.status || "pending"
+                                });
+                              }}
+                              className="ml-auto p-1.5 text-primary-500 hover:bg-primary-50 rounded-lg"
+                              title="Wysig Skool"
+                              data-testid={`edit-school-${school.id}`}
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
                           </div>
                           <div className="mt-2 text-sm text-text-secondary grid grid-cols-2 gap-2">
                             <p><strong>Kontak:</strong> {school.contact_person}</p>
@@ -5084,6 +5571,128 @@ Geniet die toets.`
                   ))
                 )}
               </div>
+
+              {/* School Edit Modal */}
+              {editingSchool && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-heading text-xl font-bold">Wysig Skool</h3>
+                      <button
+                        onClick={() => setEditingSchool(null)}
+                        className="p-2 hover:bg-slate-100 rounded-lg"
+                        data-testid="close-edit-school"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <Input
+                        label="Skool Naam"
+                        value={editSchoolForm.school_name || ""}
+                        onChange={(e) => setEditSchoolForm({...editSchoolForm, school_name: e.target.value})}
+                        testId="edit-school-name"
+                      />
+                      <div className="grid grid-cols-2 gap-4">
+                        <Input
+                          label="Kontak Persoon"
+                          value={editSchoolForm.contact_person || ""}
+                          onChange={(e) => setEditSchoolForm({...editSchoolForm, contact_person: e.target.value})}
+                          testId="edit-contact-person"
+                        />
+                        <Input
+                          label="Kontak E-pos"
+                          type="email"
+                          value={editSchoolForm.contact_email || ""}
+                          onChange={(e) => setEditSchoolForm({...editSchoolForm, contact_email: e.target.value})}
+                          testId="edit-contact-email"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Input
+                          label="WhatsApp Nommer"
+                          value={editSchoolForm.contact_whatsapp || ""}
+                          onChange={(e) => setEditSchoolForm({...editSchoolForm, contact_whatsapp: e.target.value})}
+                          testId="edit-contact-whatsapp"
+                        />
+                        <Input
+                          label="Telefoon Nommer"
+                          value={editSchoolForm.contact_phone || ""}
+                          onChange={(e) => setEditSchoolForm({...editSchoolForm, contact_phone: e.target.value})}
+                          testId="edit-contact-phone"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Input
+                          label="Skoolhoof Kontak"
+                          value={editSchoolForm.principal_contact || ""}
+                          onChange={(e) => setEditSchoolForm({...editSchoolForm, principal_contact: e.target.value})}
+                          testId="edit-principal-contact"
+                        />
+                        <Input
+                          label="Skool E-pos"
+                          type="email"
+                          value={editSchoolForm.school_email || ""}
+                          onChange={(e) => setEditSchoolForm({...editSchoolForm, school_email: e.target.value})}
+                          testId="edit-school-email"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-text-secondary mb-2">Aantal Leerders</label>
+                          <input
+                            type="number"
+                            className="input-field"
+                            value={editSchoolForm.learner_count || ""}
+                            onChange={(e) => setEditSchoolForm({...editSchoolForm, learner_count: parseInt(e.target.value) || 0})}
+                            data-testid="edit-learner-count"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-text-secondary mb-2">Status</label>
+                          <select
+                            className="input-field"
+                            value={editSchoolForm.status || "pending"}
+                            onChange={(e) => setEditSchoolForm({...editSchoolForm, status: e.target.value})}
+                            data-testid="edit-school-status"
+                          >
+                            <option value="pending">Hangende</option>
+                            <option value="approved">Goedgekeur</option>
+                            <option value="rejected">Afgekeur</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 mt-6">
+                      <Button
+                        variant="secondary"
+                        onClick={() => setEditingSchool(null)}
+                        testId="cancel-edit-school"
+                      >
+                        Kanselleer
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          try {
+                            await api.put(`/schools/${editingSchool.id}`, editSchoolForm);
+                            toast.success("Skool suksesvol opgedateer!");
+                            const res = await api.get("/schools");
+                            setSchools(res.data);
+                            setEditingSchool(null);
+                          } catch (err) {
+                            toast.error(err.response?.data?.detail || "Kon nie skool opdateer nie");
+                          }
+                        }}
+                        testId="save-edit-school"
+                      >
+                        Stoor Veranderinge
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
 
@@ -5254,6 +5863,469 @@ Geniet die toets.`
           {/* Texts Tab */}
           {activeTab === "texts" && (
             <TextsTab texts={texts} setTexts={setTexts} />
+          )}
+
+          {/* Woordbou Tab - Word Building for Grade 1-3 */}
+          {activeTab === "woordbou" && (
+            <div className="space-y-6">
+              <Card testId="woordbou-info">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
+                    <BookOpen className="w-6 h-6 text-primary-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-bold">Woordbou (Graad 1-3)</h3>
+                    <p className="text-sm text-text-muted">Leerders bou woorde deur letters te sleep</p>
+                  </div>
+                </div>
+                <p className="text-text-secondary">
+                  Laai 'n woordkaart prent op en spesifiseer watter letters beskikbaar moet wees. 
+                  Leerders sal die letters een-vir-een sleep om die woord te bou.
+                </p>
+              </Card>
+
+              {/* Create Woordbou */}
+              <Card testId="create-woordbou">
+                <h3 className="font-heading font-bold mb-4">Skep Nuwe Woordbou Oefening</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Input
+                    label="Titel"
+                    value={newWoordbou.title}
+                    onChange={(e) => setNewWoordbou({...newWoordbou, title: e.target.value})}
+                    placeholder="bv. Bou die woord: KAT"
+                    testId="woordbou-title"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-text-secondary mb-2">Graad</label>
+                      <select
+                        className="input-field"
+                        value={newWoordbou.grade_level}
+                        onChange={(e) => setNewWoordbou({...newWoordbou, grade_level: parseInt(e.target.value)})}
+                        data-testid="woordbou-grade"
+                      >
+                        <option value={1}>Graad 1</option>
+                        <option value={2}>Graad 2</option>
+                        <option value={3}>Graad 3</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-text-secondary mb-2">Kwartaal</label>
+                      <select
+                        className="input-field"
+                        value={newWoordbou.term}
+                        onChange={(e) => setNewWoordbou({...newWoordbou, term: parseInt(e.target.value)})}
+                        data-testid="woordbou-term"
+                      >
+                        {[1,2,3,4].map(t => <option key={t} value={t}>Kwartaal {t}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4 mt-4">
+                  <Input
+                    label="Teikenwoord (wat gebou moet word)"
+                    value={newWoordbou.target_word}
+                    onChange={(e) => setNewWoordbou({...newWoordbou, target_word: e.target.value.toLowerCase()})}
+                    placeholder="bv. kat"
+                    testId="woordbou-target"
+                  />
+                  <Input
+                    label="Beskikbare Letters (komma-geskeide)"
+                    value={newWoordbou.available_letters}
+                    onChange={(e) => setNewWoordbou({...newWoordbou, available_letters: e.target.value.toLowerCase()})}
+                    placeholder="bv. k, a, t, m, n"
+                    testId="woordbou-letters"
+                  />
+                </div>
+                <p className="text-xs text-text-muted mt-2">
+                  Voeg ekstra letters by om dit moeiliker te maak. Die leerder moet die korrekte letters kies en sleep om die woord te bou.
+                </p>
+                <Button
+                  onClick={async () => {
+                    if (!newWoordbou.title || !newWoordbou.target_word || !newWoordbou.available_letters) {
+                      toast.error("Vul alle velde in");
+                      return;
+                    }
+                    try {
+                      const lettersArray = newWoordbou.available_letters.split(",").map(l => l.trim()).filter(l => l);
+                      const res = await api.post("/woordbou", {
+                        ...newWoordbou,
+                        available_letters: lettersArray
+                      });
+                      toast.success("Woordbou oefening geskep!");
+                      setNewWoordbou({ title: "", grade_level: 1, term: 1, target_word: "", available_letters: "" });
+                      const listRes = await api.get("/woordbou");
+                      setWoordbouList(listRes.data.exercises || []);
+                    } catch (err) {
+                      toast.error(err.response?.data?.detail || "Kon nie skep nie");
+                    }
+                  }}
+                  className="mt-4"
+                  testId="create-woordbou-btn"
+                >
+                  Skep Woordbou Oefening
+                </Button>
+              </Card>
+
+              {/* List of Woordbou exercises */}
+              <h3 className="font-heading font-bold">Bestaande Woordbou Oefeninge</h3>
+              <div className="space-y-3">
+                {woordbouList.length === 0 ? (
+                  <Card><p className="text-text-muted">Geen woordbou oefeninge geskep nie</p></Card>
+                ) : (
+                  woordbouList.map(wb => (
+                    <Card key={wb.id} testId={`woordbou-${wb.id}`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">📚</span>
+                            <div>
+                              <h4 className="font-semibold">{wb.title}</h4>
+                              <p className="text-sm text-text-muted">
+                                Graad {wb.grade_level} | Kwartaal {wb.term} | Woord: <strong>{wb.target_word}</strong>
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {wb.available_letters?.map((letter, i) => (
+                              <span key={i} className="bg-primary-100 text-primary-700 px-3 py-1 rounded-lg font-mono font-bold">
+                                {letter}
+                              </span>
+                            ))}
+                          </div>
+                          {wb.image_url && (
+                            <div className="mt-3">
+                              <img src={`${BACKEND_URL}${wb.image_url}`} alt="Woordkaart" className="w-32 h-32 object-cover rounded-lg border" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const formData = new FormData();
+                                  formData.append("file", file);
+                                  try {
+                                    await api.post(`/woordbou/${wb.id}/image`, formData);
+                                    toast.success("Prent opgelaai!");
+                                    const res = await api.get("/woordbou");
+                                    setWoordbouList(res.data.exercises || []);
+                                  } catch (err) {
+                                    toast.error("Kon nie prent oplaai nie");
+                                  }
+                                }
+                              }}
+                            />
+                            <span className="px-3 py-2 bg-primary-50 text-primary-700 rounded-lg text-sm font-medium cursor-pointer hover:bg-primary-100 flex items-center gap-2">
+                              <Image className="w-4 h-4" />
+                              {wb.image_url ? "Verander Prent" : "Laai Prent Op"}
+                            </span>
+                          </label>
+                          <button
+                            onClick={async () => {
+                              if (window.confirm("Is jy seker jy wil hierdie oefening verwyder?")) {
+                                try {
+                                  await api.delete(`/woordbou/${wb.id}`);
+                                  toast.success("Oefening verwyder");
+                                  const res = await api.get("/woordbou");
+                                  setWoordbouList(res.data.exercises || []);
+                                } catch (err) {
+                                  toast.error("Kon nie verwyder nie");
+                                }
+                              }
+                            }}
+                            className="px-3 py-2 text-accent-500 hover:bg-accent-50 rounded-lg text-sm"
+                            data-testid={`delete-woordbou-${wb.id}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Klanktoets Tab - Sound/Spelling Test for Grade 1-3 */}
+          {activeTab === "klanktoets" && (
+            <div className="space-y-6">
+              <Card testId="klanktoets-info">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-secondary-100 rounded-xl flex items-center justify-center">
+                    <Volume2 className="w-6 h-6 text-secondary-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-bold">Speltoets / Klanktoets (Graad 1-3)</h3>
+                    <p className="text-sm text-text-muted">Leerders luister na klanke en spel woorde</p>
+                  </div>
+                </div>
+                <p className="text-text-secondary">
+                  Skep toetse waar leerders of na 'n klank/woord luister en dit moet skryf, 
+                  of na 'n prent kyk en die woord moet spel. <strong>1 punt per korrekte antwoord.</strong>
+                </p>
+              </Card>
+
+              {/* Create Klanktoets */}
+              <Card testId="create-klanktoets">
+                <h3 className="font-heading font-bold mb-4">Skep Nuwe Klanktoets</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Input
+                    label="Titel"
+                    value={newKlanktoets.title}
+                    onChange={(e) => setNewKlanktoets({...newKlanktoets, title: e.target.value})}
+                    placeholder="bv. Klanktoets - Week 1"
+                    testId="klanktoets-title"
+                  />
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-text-secondary mb-2">Graad</label>
+                      <select
+                        className="input-field"
+                        value={newKlanktoets.grade_level}
+                        onChange={(e) => setNewKlanktoets({...newKlanktoets, grade_level: parseInt(e.target.value)})}
+                        data-testid="klanktoets-grade"
+                      >
+                        <option value={1}>Graad 1</option>
+                        <option value={2}>Graad 2</option>
+                        <option value={3}>Graad 3</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-text-secondary mb-2">Kwartaal</label>
+                      <select
+                        className="input-field"
+                        value={newKlanktoets.term}
+                        onChange={(e) => setNewKlanktoets({...newKlanktoets, term: parseInt(e.target.value)})}
+                        data-testid="klanktoets-term"
+                      >
+                        {[1,2,3,4].map(t => <option key={t} value={t}>Kwartaal {t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-text-secondary mb-2">Tipe</label>
+                      <select
+                        className="input-field"
+                        value={newKlanktoets.test_type}
+                        onChange={(e) => setNewKlanktoets({...newKlanktoets, test_type: e.target.value})}
+                        data-testid="klanktoets-type"
+                      >
+                        <option value="audio_to_text">Oudio → Skryf</option>
+                        <option value="image_to_text">Prent → Skryf</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Items to add */}
+                <div className="mt-4 border-t pt-4">
+                  <p className="text-sm font-semibold mb-3">Voeg Items By (elkeen = 1 punt)</p>
+                  <div className="space-y-2">
+                    {newKlanktoets.items.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-3 bg-slate-50 rounded-lg p-3">
+                        <span className="font-bold text-primary-500">{idx + 1}.</span>
+                        <span className="flex-1">Antwoord: <strong>{item.correct_answer}</strong></span>
+                        <button
+                          onClick={() => {
+                            const newItems = newKlanktoets.items.filter((_, i) => i !== idx);
+                            setNewKlanktoets({...newKlanktoets, items: newItems});
+                          }}
+                          className="text-accent-500 hover:bg-accent-50 p-1 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-3 mt-3">
+                    <input
+                      type="text"
+                      className="input-field flex-1"
+                      placeholder="Tik korrekte antwoord (bv. kat)"
+                      id="new-klank-item"
+                      data-testid="klanktoets-new-item"
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const input = document.getElementById("new-klank-item");
+                        const answer = input?.value?.trim();
+                        if (answer) {
+                          setNewKlanktoets({
+                            ...newKlanktoets,
+                            items: [...newKlanktoets.items, { correct_answer: answer.toLowerCase() }]
+                          });
+                          input.value = "";
+                        }
+                      }}
+                      testId="add-klanktoets-item"
+                    >
+                      + Voeg By
+                    </Button>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={async () => {
+                    if (!newKlanktoets.title || newKlanktoets.items.length === 0) {
+                      toast.error("Voeg titel en ten minste een item by");
+                      return;
+                    }
+                    try {
+                      const res = await api.post("/klanktoets", newKlanktoets);
+                      toast.success(`Klanktoets geskep! Laai nou oudio/prente op vir elke item.`);
+                      setNewKlanktoets({ title: "", grade_level: 1, term: 1, test_type: "audio_to_text", items: [] });
+                      const listRes = await api.get("/klanktoets");
+                      setKlanktoetsList(listRes.data.exercises || []);
+                    } catch (err) {
+                      toast.error(err.response?.data?.detail || "Kon nie skep nie");
+                    }
+                  }}
+                  className="mt-4"
+                  disabled={newKlanktoets.items.length === 0}
+                  testId="create-klanktoets-btn"
+                >
+                  Skep Klanktoets ({newKlanktoets.items.length} items)
+                </Button>
+              </Card>
+
+              {/* List of Klanktoets exercises */}
+              <h3 className="font-heading font-bold">Bestaande Klanktoetse</h3>
+              <div className="space-y-4">
+                {klanktoetsList.length === 0 ? (
+                  <Card><p className="text-text-muted">Geen klanktoetse geskep nie</p></Card>
+                ) : (
+                  klanktoetsList.map(kt => (
+                    <Card key={kt.id} testId={`klanktoets-${kt.id}`}>
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">{kt.test_type === "audio_to_text" ? "🔊" : "🖼️"}</span>
+                            <div>
+                              <h4 className="font-semibold">{kt.title}</h4>
+                              <p className="text-sm text-text-muted">
+                                Graad {kt.grade_level} | Kwartaal {kt.term} | 
+                                {kt.test_type === "audio_to_text" ? " Luister & Skryf" : " Kyk & Skryf"} | 
+                                {kt.items?.length || 0} items ({kt.total_points || kt.items?.length} punte)
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (window.confirm("Is jy seker jy wil hierdie toets verwyder?")) {
+                              try {
+                                await api.delete(`/klanktoets/${kt.id}`);
+                                toast.success("Toets verwyder");
+                                const res = await api.get("/klanktoets");
+                                setKlanktoetsList(res.data.exercises || []);
+                              } catch (err) {
+                                toast.error("Kon nie verwyder nie");
+                              }
+                            }
+                          }}
+                          className="p-2 text-accent-500 hover:bg-accent-50 rounded-lg"
+                          data-testid={`delete-klanktoets-${kt.id}`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Items with upload options */}
+                      <div className="space-y-2 border-t pt-4">
+                        <p className="text-sm font-semibold mb-2">Items - Laai {kt.test_type === "audio_to_text" ? "oudio" : "prente"} op:</p>
+                        {kt.items?.map((item, idx) => (
+                          <div key={item.id || idx} className="flex items-center gap-3 bg-slate-50 rounded-lg p-3">
+                            <span className="font-bold text-primary-500 w-6">{idx + 1}.</span>
+                            <span className="flex-1 font-mono">{item.correct_answer}</span>
+                            {kt.test_type === "audio_to_text" ? (
+                              <>
+                                {item.audio_url ? (
+                                  <div className="flex items-center gap-2">
+                                    <audio src={`${BACKEND_URL}${item.audio_url}`} controls className="h-8" />
+                                    <Check className="w-4 h-4 text-green-500" />
+                                  </div>
+                                ) : (
+                                  <label className="cursor-pointer">
+                                    <input
+                                      type="file"
+                                      accept="audio/*"
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          const formData = new FormData();
+                                          formData.append("file", file);
+                                          formData.append("item_index", idx);
+                                          try {
+                                            await api.post(`/klanktoets/${kt.id}/audio`, formData);
+                                            toast.success(`Oudio vir "${item.correct_answer}" opgelaai!`);
+                                            const res = await api.get("/klanktoets");
+                                            setKlanktoetsList(res.data.exercises || []);
+                                          } catch (err) {
+                                            toast.error("Kon nie oudio oplaai nie");
+                                          }
+                                        }
+                                      }}
+                                    />
+                                    <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded text-sm cursor-pointer hover:bg-orange-200">
+                                      Laai Oudio Op
+                                    </span>
+                                  </label>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {item.image_url ? (
+                                  <div className="flex items-center gap-2">
+                                    <img src={`${BACKEND_URL}${item.image_url}`} alt={item.correct_answer} className="w-12 h-12 object-cover rounded" />
+                                    <Check className="w-4 h-4 text-green-500" />
+                                  </div>
+                                ) : (
+                                  <label className="cursor-pointer">
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          const formData = new FormData();
+                                          formData.append("file", file);
+                                          formData.append("item_index", idx);
+                                          try {
+                                            await api.post(`/klanktoets/${kt.id}/image`, formData);
+                                            toast.success(`Prent vir "${item.correct_answer}" opgelaai!`);
+                                            const res = await api.get("/klanktoets");
+                                            setKlanktoetsList(res.data.exercises || []);
+                                          } catch (err) {
+                                            toast.error("Kon nie prent oplaai nie");
+                                          }
+                                        }
+                                      }}
+                                    />
+                                    <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded text-sm cursor-pointer hover:bg-purple-200">
+                                      Laai Prent Op
+                                    </span>
+                                  </label>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </div>
           )}
 
           {/* Generate Tab */}
@@ -5941,6 +7013,18 @@ function App() {
           <Route path="/exercise/:type" element={
             <ProtectedRoute user={user} loading={loading} requiredType="learner">
               <ExercisePage user={user} />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/woordbou" element={
+            <ProtectedRoute user={user} loading={loading} requiredType="learner">
+              <WoordbouExercisePage user={user} />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/klanktoets" element={
+            <ProtectedRoute user={user} loading={loading} requiredType="learner">
+              <KlanktoetsExercisePage user={user} />
             </ProtectedRoute>
           } />
           

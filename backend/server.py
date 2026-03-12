@@ -259,6 +259,44 @@ class SchoolPackageUpdate(BaseModel):
     once_off_price: Optional[float] = None
     custom_price: Optional[float] = None
     billing_cycle: Optional[str] = None  # "monthly" or "once_off"
+
+class SchoolUpdate(BaseModel):
+    school_name: Optional[str] = None
+    contact_person: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_whatsapp: Optional[str] = None
+    contact_phone: Optional[str] = None
+    principal_contact: Optional[str] = None
+    school_email: Optional[str] = None
+    learner_count: Optional[int] = None
+    status: Optional[str] = None  # pending, approved, rejected
+
+# Woordbou (Word Building) Model for Grade 1-3
+class WoordbouCreate(BaseModel):
+    title: str
+    grade_level: int = Field(ge=1, le=3)
+    term: int = Field(default=1, ge=1, le=4)
+    target_word: str  # The word to build
+    available_letters: List[str]  # Letters available to drag
+    image_url: Optional[str] = None  # Optional image of word card
+
+class WoordbouSubmission(BaseModel):
+    woordbou_id: str
+    built_word: str
+    time_seconds: float
+
+# Klanktoets (Sound Test) Model for Grade 1-3
+class KlanktoetsCreate(BaseModel):
+    title: str
+    grade_level: int = Field(ge=1, le=3)
+    term: int = Field(default=1, ge=1, le=4)
+    test_type: str  # "audio_to_text" or "image_to_text"
+    items: List[Dict[str, Any]]  # List of {audio_url, correct_answer} or {image_url, correct_answer}
+
+class KlanktoetsSubmission(BaseModel):
+    klanktoets_id: str
+    answers: List[str]
+    time_seconds: Optional[float] = None
     
 class ReadingLevelTestHistory(BaseModel):
     learner_id: str
@@ -1203,6 +1241,59 @@ async def update_school_package(school_id: str, package: SchoolPackageUpdate, cu
     )
     
     return {"message": "Skool pakket opgedateer", "package": package_data}
+
+# School Update Endpoint (Edit school information)
+@api_router.put("/schools/{school_id}")
+async def update_school(school_id: str, school_update: SchoolUpdate, current_user: dict = Depends(get_current_user)):
+    """Update school information (admin only)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    school = await db.schools.find_one({"id": school_id})
+    if not school:
+        raise HTTPException(status_code=404, detail="Skool nie gevind nie")
+    
+    # Build update dict with only provided fields
+    update_data = {}
+    if school_update.school_name is not None:
+        update_data["school_name"] = school_update.school_name
+        # Also update school_codes collection
+        await db.school_codes.update_many(
+            {"school_id": school_id},
+            {"$set": {"school_name": school_update.school_name}}
+        )
+        # Update learners with this school
+        await db.learners.update_many(
+            {"school_id": school_id},
+            {"$set": {"school_name": school_update.school_name}}
+        )
+    if school_update.contact_person is not None:
+        update_data["contact_person"] = school_update.contact_person
+    if school_update.contact_email is not None:
+        update_data["contact_email"] = school_update.contact_email
+    if school_update.contact_whatsapp is not None:
+        update_data["contact_whatsapp"] = school_update.contact_whatsapp
+    if school_update.contact_phone is not None:
+        update_data["contact_phone"] = school_update.contact_phone
+    if school_update.principal_contact is not None:
+        update_data["principal_contact"] = school_update.principal_contact
+    if school_update.school_email is not None:
+        update_data["school_email"] = school_update.school_email
+    if school_update.learner_count is not None:
+        update_data["learner_count"] = school_update.learner_count
+    if school_update.status is not None:
+        update_data["status"] = school_update.status
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Geen velde om op te dateer nie")
+    
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.schools.update_one({"id": school_id}, {"$set": update_data})
+    
+    # Return updated school
+    updated_school = await db.schools.find_one({"id": school_id}, {"_id": 0})
+    return {"message": "Skool suksesvol opgedateer", "school": updated_school}
 
 @api_router.get("/schools/{school_id}/package")
 async def get_school_package(school_id: str, current_user: dict = Depends(get_current_user)):
@@ -3048,6 +3139,479 @@ async def upload_logo(
     )
     
     return {"logo_url": logo_url, "message": "Logo opgelaai"}
+
+# ==================== WOORDBOU (Word Building) for Grade 1-3 ====================
+
+@api_router.post("/woordbou")
+async def create_woordbou(woordbou: WoordbouCreate, current_user: dict = Depends(get_current_user)):
+    """Create a new Woordbou exercise (admin only)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    woordbou_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    woordbou_doc = {
+        "id": woordbou_id,
+        "title": woordbou.title,
+        "grade_level": woordbou.grade_level,
+        "term": woordbou.term,
+        "target_word": woordbou.target_word.lower(),
+        "available_letters": [l.lower() for l in woordbou.available_letters],
+        "image_url": woordbou.image_url,
+        "created_at": now
+    }
+    
+    await db.woordbou.insert_one(woordbou_doc)
+    return {"id": woordbou_id, "message": "Woordbou oefening geskep"}
+
+@api_router.post("/woordbou/{woordbou_id}/image")
+async def upload_woordbou_image(
+    woordbou_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload image for Woordbou exercise"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    # Check if woordbou exists
+    woordbou = await db.woordbou.find_one({"id": woordbou_id})
+    if not woordbou:
+        raise HTTPException(status_code=404, detail="Woordbou oefening nie gevind nie")
+    
+    # Save file
+    upload_dir = Path("/app/uploads/images/woordbou")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_ext = file.filename.split('.')[-1] if file.filename else 'jpg'
+    filename = f"{woordbou_id}_{uuid.uuid4()}.{file_ext}"
+    file_path = upload_dir / filename
+    
+    async with aiofiles.open(file_path, 'wb') as out_file:
+        content = await file.read()
+        await out_file.write(content)
+    
+    image_url = f"/api/uploads/images/woordbou/{filename}"
+    await db.woordbou.update_one(
+        {"id": woordbou_id},
+        {"$set": {"image_url": image_url, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"image_url": image_url, "message": "Prent opgelaai"}
+
+@api_router.get("/uploads/images/woordbou/{filename}")
+async def get_woordbou_image(filename: str):
+    """Serve woordbou images"""
+    file_path = Path(f"/app/uploads/images/woordbou/{filename}")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Prent nie gevind nie")
+    return FileResponse(file_path)
+
+@api_router.get("/woordbou")
+async def get_woordbou_exercises(
+    grade_level: Optional[int] = None,
+    term: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get Woordbou exercises for learner or all for admin"""
+    query = {}
+    
+    if current_user["user_type"] == "learner":
+        # Check subscription
+        subscription = await check_subscription(current_user["user_id"])
+        if not subscription["active"]:
+            raise HTTPException(status_code=402, detail="Subskripsie vereis")
+        
+        # Get learner's grade (only grades 1-3)
+        learner = await db.learners.find_one({"id": current_user["user_id"]}, {"_id": 0})
+        learner_grade = learner.get("current_reading_level", learner.get("grade", 1)) if learner else 1
+        
+        if learner_grade > 3:
+            return {"exercises": [], "message": "Woordbou is slegs vir Graad 1-3"}
+        
+        query["grade_level"] = learner_grade
+    else:
+        # Admin can filter
+        if grade_level:
+            query["grade_level"] = grade_level
+    
+    if term:
+        query["term"] = term
+    
+    exercises = await db.woordbou.find(query, {"_id": 0}).to_list(100)
+    return {"exercises": exercises}
+
+@api_router.get("/woordbou/{woordbou_id}")
+async def get_woordbou_exercise(woordbou_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific Woordbou exercise"""
+    woordbou = await db.woordbou.find_one({"id": woordbou_id}, {"_id": 0})
+    if not woordbou:
+        raise HTTPException(status_code=404, detail="Woordbou oefening nie gevind nie")
+    return woordbou
+
+@api_router.put("/woordbou/{woordbou_id}")
+async def update_woordbou(woordbou_id: str, woordbou: WoordbouCreate, current_user: dict = Depends(get_current_user)):
+    """Update Woordbou exercise (admin only)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    existing = await db.woordbou.find_one({"id": woordbou_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Woordbou oefening nie gevind nie")
+    
+    update_data = {
+        "title": woordbou.title,
+        "grade_level": woordbou.grade_level,
+        "term": woordbou.term,
+        "target_word": woordbou.target_word.lower(),
+        "available_letters": [l.lower() for l in woordbou.available_letters],
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    if woordbou.image_url:
+        update_data["image_url"] = woordbou.image_url
+    
+    await db.woordbou.update_one({"id": woordbou_id}, {"$set": update_data})
+    return {"message": "Woordbou oefening opgedateer"}
+
+@api_router.delete("/woordbou/{woordbou_id}")
+async def delete_woordbou(woordbou_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete Woordbou exercise (admin only)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    result = await db.woordbou.delete_one({"id": woordbou_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Woordbou oefening nie gevind nie")
+    return {"message": "Woordbou oefening verwyder"}
+
+@api_router.post("/woordbou/submit")
+async def submit_woordbou(submission: WoordbouSubmission, current_user: dict = Depends(get_current_user)):
+    """Submit Woordbou answer"""
+    if current_user["user_type"] != "learner":
+        raise HTTPException(status_code=403, detail="Slegs leerders")
+    
+    # Get the woordbou exercise
+    woordbou = await db.woordbou.find_one({"id": submission.woordbou_id}, {"_id": 0})
+    if not woordbou:
+        raise HTTPException(status_code=404, detail="Woordbou oefening nie gevind nie")
+    
+    # Check if correct
+    is_correct = submission.built_word.lower().strip() == woordbou["target_word"].lower()
+    
+    # Save result
+    result_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    result_doc = {
+        "id": result_id,
+        "learner_id": current_user["user_id"],
+        "exercise_type": "woordbou",
+        "woordbou_id": submission.woordbou_id,
+        "target_word": woordbou["target_word"],
+        "built_word": submission.built_word,
+        "is_correct": is_correct,
+        "score": 100 if is_correct else 0,
+        "time_seconds": submission.time_seconds,
+        "created_at": now
+    }
+    
+    await db.exercise_results.insert_one(result_doc)
+    
+    return {
+        "correct": is_correct,
+        "target_word": woordbou["target_word"],
+        "message": "Uitstekend! Reg!" if is_correct else f"Die korrekte woord was: {woordbou['target_word']}"
+    }
+
+# ==================== KLANKTOETS (Sound/Spelling Test) for Grade 1-3 ====================
+
+@api_router.post("/klanktoets")
+async def create_klanktoets(klanktoets: KlanktoetsCreate, current_user: dict = Depends(get_current_user)):
+    """Create a new Klanktoets (admin only)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    klanktoets_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Process items - ensure each has an ID
+    processed_items = []
+    for i, item in enumerate(klanktoets.items):
+        processed_items.append({
+            "id": str(uuid.uuid4()),
+            "order": i + 1,
+            "audio_url": item.get("audio_url"),
+            "image_url": item.get("image_url"),
+            "correct_answer": item.get("correct_answer", "").lower(),
+            "points": 1
+        })
+    
+    klanktoets_doc = {
+        "id": klanktoets_id,
+        "title": klanktoets.title,
+        "grade_level": klanktoets.grade_level,
+        "term": klanktoets.term,
+        "test_type": klanktoets.test_type,  # "audio_to_text" or "image_to_text"
+        "items": processed_items,
+        "total_points": len(processed_items),
+        "created_at": now
+    }
+    
+    await db.klanktoets.insert_one(klanktoets_doc)
+    return {"id": klanktoets_id, "message": "Klanktoets geskep"}
+
+@api_router.post("/klanktoets/{klanktoets_id}/audio")
+async def upload_klanktoets_audio(
+    klanktoets_id: str,
+    item_index: int = Form(...),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload audio for a Klanktoets item"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    klanktoets = await db.klanktoets.find_one({"id": klanktoets_id})
+    if not klanktoets:
+        raise HTTPException(status_code=404, detail="Klanktoets nie gevind nie")
+    
+    # Save audio file
+    upload_dir = Path("/app/uploads/audio/klanktoets")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_ext = file.filename.split('.')[-1] if file.filename else 'mp3'
+    filename = f"{klanktoets_id}_{item_index}_{uuid.uuid4()}.{file_ext}"
+    file_path = upload_dir / filename
+    
+    async with aiofiles.open(file_path, 'wb') as out_file:
+        content = await file.read()
+        await out_file.write(content)
+    
+    audio_url = f"/api/uploads/audio/klanktoets/{filename}"
+    
+    # Update the specific item
+    items = klanktoets.get("items", [])
+    if item_index < len(items):
+        items[item_index]["audio_url"] = audio_url
+        await db.klanktoets.update_one(
+            {"id": klanktoets_id},
+            {"$set": {"items": items, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    
+    return {"audio_url": audio_url, "message": "Oudio opgelaai"}
+
+@api_router.post("/klanktoets/{klanktoets_id}/image")
+async def upload_klanktoets_image(
+    klanktoets_id: str,
+    item_index: int = Form(...),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload image for a Klanktoets item"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    klanktoets = await db.klanktoets.find_one({"id": klanktoets_id})
+    if not klanktoets:
+        raise HTTPException(status_code=404, detail="Klanktoets nie gevind nie")
+    
+    # Save image file
+    upload_dir = Path("/app/uploads/images/klanktoets")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_ext = file.filename.split('.')[-1] if file.filename else 'jpg'
+    filename = f"{klanktoets_id}_{item_index}_{uuid.uuid4()}.{file_ext}"
+    file_path = upload_dir / filename
+    
+    async with aiofiles.open(file_path, 'wb') as out_file:
+        content = await file.read()
+        await out_file.write(content)
+    
+    image_url = f"/api/uploads/images/klanktoets/{filename}"
+    
+    # Update the specific item
+    items = klanktoets.get("items", [])
+    if item_index < len(items):
+        items[item_index]["image_url"] = image_url
+        await db.klanktoets.update_one(
+            {"id": klanktoets_id},
+            {"$set": {"items": items, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    
+    return {"image_url": image_url, "message": "Prent opgelaai"}
+
+@api_router.get("/uploads/audio/klanktoets/{filename}")
+async def get_klanktoets_audio(filename: str):
+    """Serve klanktoets audio files"""
+    file_path = Path(f"/app/uploads/audio/klanktoets/{filename}")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Oudio nie gevind nie")
+    return FileResponse(file_path)
+
+@api_router.get("/uploads/images/klanktoets/{filename}")
+async def get_klanktoets_image(filename: str):
+    """Serve klanktoets image files"""
+    file_path = Path(f"/app/uploads/images/klanktoets/{filename}")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Prent nie gevind nie")
+    return FileResponse(file_path)
+
+@api_router.get("/klanktoets")
+async def get_klanktoets_list(
+    grade_level: Optional[int] = None,
+    term: Optional[int] = None,
+    test_type: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get Klanktoets exercises"""
+    query = {}
+    
+    if current_user["user_type"] == "learner":
+        # Check subscription
+        subscription = await check_subscription(current_user["user_id"])
+        if not subscription["active"]:
+            raise HTTPException(status_code=402, detail="Subskripsie vereis")
+        
+        # Get learner's grade (only grades 1-3)
+        learner = await db.learners.find_one({"id": current_user["user_id"]}, {"_id": 0})
+        learner_grade = learner.get("current_reading_level", learner.get("grade", 1)) if learner else 1
+        
+        if learner_grade > 3:
+            return {"exercises": [], "message": "Klanktoets is slegs vir Graad 1-3"}
+        
+        query["grade_level"] = learner_grade
+    else:
+        if grade_level:
+            query["grade_level"] = grade_level
+    
+    if term:
+        query["term"] = term
+    if test_type:
+        query["test_type"] = test_type
+    
+    exercises = await db.klanktoets.find(query, {"_id": 0}).to_list(100)
+    return {"exercises": exercises}
+
+@api_router.get("/klanktoets/{klanktoets_id}")
+async def get_klanktoets(klanktoets_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific Klanktoets"""
+    klanktoets = await db.klanktoets.find_one({"id": klanktoets_id}, {"_id": 0})
+    if not klanktoets:
+        raise HTTPException(status_code=404, detail="Klanktoets nie gevind nie")
+    return klanktoets
+
+@api_router.put("/klanktoets/{klanktoets_id}")
+async def update_klanktoets(klanktoets_id: str, klanktoets: KlanktoetsCreate, current_user: dict = Depends(get_current_user)):
+    """Update Klanktoets (admin only)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    existing = await db.klanktoets.find_one({"id": klanktoets_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Klanktoets nie gevind nie")
+    
+    # Keep existing audio/image URLs if items match
+    existing_items = existing.get("items", [])
+    processed_items = []
+    for i, item in enumerate(klanktoets.items):
+        new_item = {
+            "id": existing_items[i]["id"] if i < len(existing_items) else str(uuid.uuid4()),
+            "order": i + 1,
+            "correct_answer": item.get("correct_answer", "").lower(),
+            "points": 1
+        }
+        # Keep existing URLs if not provided
+        if i < len(existing_items):
+            new_item["audio_url"] = item.get("audio_url") or existing_items[i].get("audio_url")
+            new_item["image_url"] = item.get("image_url") or existing_items[i].get("image_url")
+        else:
+            new_item["audio_url"] = item.get("audio_url")
+            new_item["image_url"] = item.get("image_url")
+        processed_items.append(new_item)
+    
+    update_data = {
+        "title": klanktoets.title,
+        "grade_level": klanktoets.grade_level,
+        "term": klanktoets.term,
+        "test_type": klanktoets.test_type,
+        "items": processed_items,
+        "total_points": len(processed_items),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.klanktoets.update_one({"id": klanktoets_id}, {"$set": update_data})
+    return {"message": "Klanktoets opgedateer"}
+
+@api_router.delete("/klanktoets/{klanktoets_id}")
+async def delete_klanktoets(klanktoets_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete Klanktoets (admin only)"""
+    if current_user["user_type"] != "admin":
+        raise HTTPException(status_code=403, detail="Slegs admin toegang")
+    
+    result = await db.klanktoets.delete_one({"id": klanktoets_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Klanktoets nie gevind nie")
+    return {"message": "Klanktoets verwyder"}
+
+@api_router.post("/klanktoets/submit")
+async def submit_klanktoets(submission: KlanktoetsSubmission, current_user: dict = Depends(get_current_user)):
+    """Submit Klanktoets answers"""
+    if current_user["user_type"] != "learner":
+        raise HTTPException(status_code=403, detail="Slegs leerders")
+    
+    klanktoets = await db.klanktoets.find_one({"id": submission.klanktoets_id}, {"_id": 0})
+    if not klanktoets:
+        raise HTTPException(status_code=404, detail="Klanktoets nie gevind nie")
+    
+    # Grade answers - 1 point per correct answer
+    items = klanktoets.get("items", [])
+    correct_count = 0
+    graded_answers = []
+    
+    for i, answer in enumerate(submission.answers):
+        if i < len(items):
+            is_correct = answer.lower().strip() == items[i]["correct_answer"].lower().strip()
+            if is_correct:
+                correct_count += 1
+            graded_answers.append({
+                "item_id": items[i]["id"],
+                "user_answer": answer,
+                "correct_answer": items[i]["correct_answer"],
+                "is_correct": is_correct,
+                "points": 1 if is_correct else 0
+            })
+    
+    total_points = len(items)
+    score_percentage = (correct_count / total_points * 100) if total_points > 0 else 0
+    
+    # Save result
+    result_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    result_doc = {
+        "id": result_id,
+        "learner_id": current_user["user_id"],
+        "exercise_type": "klanktoets",
+        "klanktoets_id": submission.klanktoets_id,
+        "test_type": klanktoets.get("test_type"),
+        "answers": graded_answers,
+        "correct_count": correct_count,
+        "total_points": total_points,
+        "score": score_percentage,
+        "time_seconds": submission.time_seconds,
+        "created_at": now
+    }
+    
+    await db.exercise_results.insert_one(result_doc)
+    
+    return {
+        "correct_count": correct_count,
+        "total_points": total_points,
+        "score": round(score_percentage, 1),
+        "graded_answers": graded_answers,
+        "message": f"Jy het {correct_count} uit {total_points} reg gekry! ({round(score_percentage)}%)"
+    }
 
 @api_router.get("/uploads/logo/{filename}")
 async def serve_logo(filename: str):
